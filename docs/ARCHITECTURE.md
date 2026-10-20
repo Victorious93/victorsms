@@ -319,6 +319,29 @@ place a call through its SIM, or receive a mirror of the other's incoming texts.
   3. a SIP softphone on the PC over the mesh.
 - Costs: alias texts, SIP minutes and numbers are billed by Twilio to Don's account.
 
+## 20. Persona drafter + voice notes (implemented, not device-tested; PC side not included)
+
+- **PC endpoints** (`PcSettings`, all empty = off; reached over the mesh):
+  - LLM: Ollama-compatible `POST {llmUrl}/api/chat {model, messages, stream:false}` →
+    `message.content` (for example Ollama on Don's ROCm PC). The model name is configurable.
+  - Voice: `POST {ttsUrl} {"text","voice"}` → audio bytes (wav, or mp3 by content type). This is
+    **our contract**: Chatterbox (MIT) has no standard HTTP API, so the PC needs a small wrapper.
+- **Persona import** (`PersonaStore`): SAF picker for `.md`/`.txt`/`.json`/`.csv`, or a `.zip`
+  containing them (path-traversal entries skipped). App-private `persona.txt`, capped at 200 KB;
+  the last 24 KB goes into the prompt.
+- **Draft reply** (`Drafter`): system prompt = persona + samples; user prompt = the last 20
+  messages. The result is **placed in the composer only**. Don reviews, edits and taps Send.
+  **No autosend.** Shown in SMS threads and Matrix rooms.
+- **Consent gate** (`VoiceRegistry`): a voice can be added only with a declaration, either
+  "my own voice" or "someone else who consented" (who + how/when required). Voice notes can only
+  use registered voices (currently the first one). Removing a voice removes it from the app.
+  The reference audio lives on the PC.
+- **Voice notes:** synthesized from the current draft into `files/voice_notes/`, played locally
+  and shared by Don through the Android share sheet (`FileProvider`). Sending them automatically
+  as MMS or Matrix audio is not built.
+- Privacy: tapping Draft sends the persona text and the last 20 messages of that thread to Don's
+  PC URL. Nothing is sent otherwise.
+
 ## Milestones
 
 1. Scaffold (this PR): Compose shell, theme, icon, CI.

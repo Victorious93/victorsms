@@ -58,6 +58,7 @@ class MainActivity : ComponentActivity() {
                                 "Spam folder" to { nav.navigate("spam") },
                                 "Caller lookup" to { nav.navigate("lookup") },
                                 "Twilio alias number" to { nav.navigate("twilio") },
+                                "Assistant & persona" to { nav.navigate("assistant") },
                                 "Phone (keypad + recents)" to {
                                     startActivity(android.content.Intent(this@MainActivity, com.victorious.sms.phone.DialerActivity::class.java))
                                 },
@@ -65,6 +66,7 @@ class MainActivity : ComponentActivity() {
                         ) { nav.popBackStack() }
                     }
                     composable("blocking") { BlockingScreen { nav.popBackStack() } }
+                    composable("assistant") { com.victorious.sms.ui.screens.AssistantSettingsScreen { nav.popBackStack() } }
                     composable("twilio") { com.victorious.sms.ui.screens.TwilioScreen { nav.popBackStack() } }
                     composable("lookup") { com.victorious.sms.ui.screens.LookupSettingsScreen { nav.popBackStack() } }
                     composable("spam") { SpamFolderScreen { nav.popBackStack() } }

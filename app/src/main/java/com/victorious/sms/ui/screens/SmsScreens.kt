@@ -82,6 +82,7 @@ fun SmsThreadScreen(threadId: Long, address: String, initialBody: String = "", o
             }
         }
         status?.let { Text(it, color = Magenta, modifier = Modifier.padding(horizontal = 12.dp)) }
+        AssistBar(to, { msgs.map { it.outgoing to it.body } }, draft) { draft = it }
         if (twilio.isSet() && twilio.aliasNumber.isNotBlank()) {
             Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 androidx.compose.material3.Checkbox(checked = viaAlias, onCheckedChange = { viaAlias = it })
