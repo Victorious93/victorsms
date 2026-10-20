@@ -22,6 +22,7 @@ class SmsDeliverReceiver : BroadcastReceiver() {
             put(Telephony.Sms.ADDRESS, address); put(Telephony.Sms.BODY, body)
             put(Telephony.Sms.DATE, System.currentTimeMillis()); put(Telephony.Sms.READ, 0)
         })
+        com.victorious.sms.relay.RelayNode.get(context).mirrorIncoming(address, body) // opt-in per peer only
         // Fleet SMS trigger (whitelist + code word -> forward to droidcommand-AI) is planned, not here.
     }
 }

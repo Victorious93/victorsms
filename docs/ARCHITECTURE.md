@@ -214,6 +214,51 @@ Spec: `Victorious93/droidcommand-AI` `docs/specs/UNIFIED_BACKUP.md` (DCA #236).
 - The fleet SMS trigger (whitelist + code word → droidcommand-AI) is still planned and is not in
   `SmsDeliverReceiver`.
 
+## 15. Per-ABI APKs
+
+- `splits.abi` builds `arm64-v8a`, `armeabi-v7a` and `x86_64` debug APKs, with `universalApk false`.
+  CI uploads one artifact per ABI (`victorsms-debug-<abi>`).
+
+## 16. Phone-to-phone relay (implemented, not device-tested)
+
+Two phones running VictorSMS pair with each other. One can then ask the other to send an SMS or
+place a call through its SIM, or receive a mirror of the other's incoming texts.
+
+- **Identity:** an EC P-256 key generated in the **Android Keystore** (cannot be exported), with a
+  self-signed certificate. A peer is identified by its certificate SHA-256 (pinned).
+- **Transport:** **mutual TLS 1.3** (`javax.net.ssl`, no extra library), port **47320**. Both
+  sides present their Keystore certs, and each side accepts only pinned peers. One JSON request
+  line and one JSON reply line per connection:
+  `{"protocol_major":1,"id","op","params":{requestId, nonce, timestampMs, ttlMs, ...}}`.
+- **Pairing (numeric comparison):** phone B taps *Wait for pairing* (a 5-minute window in which
+  unknown certs may complete TLS but may only call `relay.pair.hello`). Phone A enters B's mesh
+  address and taps *Pair*. Both show a 6-digit code = SHA-256 over both cert fingerprints. Don
+  confirms on **each** phone only if the codes match. That stops a man-in-the-middle, because an
+  attacker's cert would produce a different code. QR exchange is planned (it would need a QR
+  library such as ZXing, Apache-2.0).
+- **Victorious Mesh integration point:** the relay only needs an IP-reachable `host:port`. Today it
+  is typed in (the screen lists this phone's IPv4 addresses). Later, Victorious Mesh should provide
+  the peer address (for example via a `mesh.peers` query or a Headscale MagicDNS name) and keep it
+  updated. The pinned cert, not the address, is the identity, so a changed address is harmless.
+- **Ops** (every one validates the fleet envelope: 128-bit nonce single use, `timestampMs`, `ttlMs`
+  default 120000, via the shared `ReplayGuard`):
+  - `relay.sms.send {to, body}` → approval screen on the receiving phone (reuses
+    `ApproveSendActivity`) → sends via its SIM only on Approve. Poll with `relay.sms.send.status`.
+  - `relay.sms.inbox {from, body}` → pushed **only** by a phone whose user enabled *Mirror my
+    incoming texts* for that peer. Shown as a notification on the receiving phone.
+  - `relay.call.place {to}` → approval screen (`ApproveCallActivity`) → on Approve, opens the system
+    dialer pre-filled (`ACTION_DIAL`; no `CALL_PHONE` permission, so Don still taps call). Poll
+    with `relay.call.status` (`pending | dialing | denied | expired`).
+- **Permissions per paired phone** (Settings → Paired phones): *allow SMS*, *allow calls*,
+  *mirror inbox*. All are **off** after pairing. *Revoke pairing* deletes the pin. The listener
+  runs only while the *Phone relay* switch is on (a foreground service, `specialUse`).
+- **Call audio bridging is a stub.** The call happens on the remote phone. Options for the
+  future: (1) a Twilio SIP plugin (paid; audio leaves the mesh through Twilio); (2) WebRTC over
+  the mesh, capturing the remote call audio. Android restricts call-audio capture for third-party
+  apps, so this likely needs the default dialer role plus `InCallService` and is not guaranteed on
+  every device.
+- Pending requests are in memory only. The paired-phones list is in EncryptedSharedPreferences.
+
 ## Milestones
 
 1. Scaffold (this PR): Compose shell, theme, icon, CI.

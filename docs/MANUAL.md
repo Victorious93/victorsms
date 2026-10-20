@@ -16,7 +16,7 @@ not decide or run fleet actions itself.
 
 ## Install & setup
 
-1. Download the debug APK from the CI artifacts of the latest build (or build it yourself with
+1. Download the debug APK for your phone (`arm64-v8a` for almost all phones) from the CI artifacts of the latest build (or build it yourself with
    `./gradlew assembleDebug`).
 2. Allow "Install unknown apps" for your file manager or browser, then open the APK.
 3. Open VictorSMS. Today you will see the scaffold home screen.
@@ -104,6 +104,23 @@ not decide or run fleet actions itself.
 4. VictorSMS asks you to confirm on the phone before applying. An import never turns on remote control.
 
 
+### Phone-to-phone relay (built, not device-tested)
+Use a second phone's SIM from this phone, over the Victorious Mesh.
+1. On **both** phones: Settings → **Paired phones** → turn on **Phone relay**.
+2. On the phone you want to pair with, tap **Wait for pairing** (open for 5 minutes).
+3. On this phone, type the other phone's address (shown on its screen, e.g. `100.64.0.7:47320`)
+   and tap **Pair**.
+4. Both phones show a 6-digit code. Tap **Codes match** on each phone only if the codes are the
+   same. Otherwise tap Cancel.
+5. Everything is off after pairing. On the phone with the SIM you want to use, turn on what that
+   peer may ask for: **send SMS**, **place calls**, and/or **mirror my incoming texts** to it.
+6. To send: under the paired phone, enter a number and text and tap **Send via …**. The other
+   phone shows an approval screen; it sends only after someone taps **Approve** there.
+7. To call: tap **Call via**. The other phone asks for approval, then opens its dialer with the
+   number. The call audio stays on that phone for now (audio bridging is planned).
+8. **Revoke pairing** removes the phone completely.
+   `[screenshot: paired phones]` `[screenshot: pairing code]`
+
 ## Permissions and why
 
 | Permission / role | Why | Status |
@@ -116,7 +133,8 @@ not decide or run fleet actions itself.
 | `READ_CONTACTS` | Show names instead of numbers; first step of caller lookup | planned |
 | `POST_NOTIFICATIONS` | New-message notifications | planned |
 | Dialer / call-screening role | Optional phone features and blocklist | planned |
-| `INTERNET` | Matrix and mesh traffic | built |
+| `INTERNET` | Matrix, mesh and phone-relay traffic | built |
+| Foreground service (special use) | Keeps the phone-relay listener running while you have it on | built |
 
 You can deny any optional permission; the related feature simply stays off.
 
@@ -141,6 +159,12 @@ You can deny any optional permission; the related feature simply stays off.
   message bodies, phone numbers, your code word or your whitelist.
 
 ## Troubleshooting/FAQ
+
+- **Pair says "Could not connect".** Phone relay must be on on the other phone, both phones must
+  be on the mesh, and port 47320 must be reachable.
+- **Pairing refused: not_pairing.** Tap **Wait for pairing** on the other phone first.
+- **Install says "app not compatible".** Use the APK for your phone's CPU: almost all modern phones
+  use `arm64-v8a`; emulators use `x86_64`.
 
 - **No SMS threads in the inbox.** Tap **Set up** and make VictorSMS the default SMS app, then
   allow the SMS permission.
@@ -168,6 +192,8 @@ You can deny any optional permission; the related feature simply stays off.
   default.
 - Offload to Don's PC goes only over the encrypted mesh, only for features you turned on.
 - Online caller lookup is opt-in.
+- Phone relay traffic is end-to-end encrypted (mutual TLS 1.3, pinned keys that never leave each
+  phone's Keystore). Mirroring texts to another phone is off unless you turn it on for that phone.
 - **Voice-clone / persona consent gate:** voice cloning and persona features may only use
   **Don's own voice** or voices of people who gave explicit consent. The app will refuse to create
   a voice or persona from anyone else's recordings. (planned)

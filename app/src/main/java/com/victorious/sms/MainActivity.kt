@@ -10,6 +10,7 @@ import androidx.navigation.compose.rememberNavController
 import com.victorious.sms.ui.screens.ConnectedAppsScreen
 import com.victorious.sms.ui.screens.HelpScreen
 import com.victorious.sms.ui.screens.SettingsScreen
+import com.victorious.sms.ui.screens.PairedPhonesScreen
 import com.victorious.sms.ui.screens.SmsThreadScreen
 import com.victorious.sms.ui.screens.LoginScreen
 import com.victorious.sms.ui.screens.RoomListScreen
@@ -47,8 +48,12 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                     composable("settings") {
-                        SettingsScreen(onConnectedApps = { nav.navigate("connected_apps") }) { nav.popBackStack() }
+                        SettingsScreen(
+                            onConnectedApps = { nav.navigate("connected_apps") },
+                            onPairedPhones = { nav.navigate("paired_phones") },
+                        ) { nav.popBackStack() }
                     }
+                    composable("paired_phones") { PairedPhonesScreen { nav.popBackStack() } }
                     composable("connected_apps") { ConnectedAppsScreen { nav.popBackStack() } }
                     composable("rooms") {
                         RoomListScreen(
