@@ -14,7 +14,7 @@ val hasReleaseSigning = listOf(releaseStoreFile, releaseStorePassword, releaseKe
 
 android {
     namespace = "com.victorious.sms"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.victorious.sms"
