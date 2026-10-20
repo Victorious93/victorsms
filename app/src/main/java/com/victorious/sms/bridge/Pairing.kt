@@ -13,7 +13,7 @@ enum class OpGroup { READ, SEND }
 /** Which group an op belongs to; null = not exposed to paired apps. */
 fun opGroupOf(op: String): OpGroup? = when (op) {
     "capabilities.get", NodeStatusCapability.OP, "sms.list_threads", "sms.read_thread", "sms.status" -> OpGroup.READ
-    "sms.send" -> OpGroup.SEND
+    "sms.send", "sms.send.status" -> OpGroup.SEND
     else -> null
 }
 
@@ -124,7 +124,7 @@ class BridgeAuthorizer(private val context: Context) {
         if (group !in app.groups) return AuthDecision.Denied("permission_denied")
         return AuthDecision.Allowed(
             CallerIdentity(app.packageName, app.certSha256),
-            needsUserConfirm = group == OpGroup.SEND,
+            needsUserConfirm = op == "sms.send",
         )
     }
 }

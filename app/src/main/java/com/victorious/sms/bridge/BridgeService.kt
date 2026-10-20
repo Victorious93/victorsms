@@ -9,31 +9,70 @@ import android.os.Looper
 import android.os.Message
 import android.os.Messenger
 import android.os.RemoteException
+import org.json.JSONArray
+import org.json.JSONObject
 
 /**
- * EXTERNAL_NODE Messenger bridge. Request: Message.data "frame" = one JSON line with "op"/"id".
- * Reply: Message.data "frame" = {"id","ok","error"?}. Caller identity comes ONLY from
- * Message.sendingUid resolved through PackageManager, never from the payload.
- * Skeleton: authorization is real; op handlers are not wired yet, and sends are never executed
- * without on-device confirmation (confirmation UI not built yet).
+ * EXTERNAL_NODE Messenger bridge. Request: Message.data "frame" = one JSON object
+ * {"protocol_major":1,"id","op","params":{...}}. Reply: {"id","ok","result"?,"error"?}.
+ * Caller identity comes ONLY from Message.sendingUid resolved through PackageManager.
  */
 class BridgeService : Service() {
     private lateinit var authorizer: BridgeAuthorizer
 
     private val handler = object : Handler(Looper.getMainLooper()) {
         override fun handleMessage(msg: Message) {
-            val frame = msg.data?.getString("frame").orEmpty()
-            val op = Regex("\"op\"\\s*:\\s*\"([^\"]+)\"").find(frame)?.groupValues?.get(1).orEmpty()
-            val id = Regex("\"id\"\\s*:\\s*\"([A-Za-z0-9_-]{0,64})\"").find(frame)?.groupValues?.get(1).orEmpty()
-            val error = when (val d = authorizer.authorize(msg.sendingUid, op)) {
-                is AuthDecision.Denied -> d.code
-                is AuthDecision.Allowed -> if (d.needsUserConfirm) "confirmation_required" else "not_implemented"
-            }
-            val reply = """{"id":"$id","ok":false,"error":"$error"}"""
-            val out = Message.obtain(null, msg.what).apply { data = Bundle().apply { putString("frame", reply) } }
+            val reply = handle(msg.sendingUid, msg.data?.getString("frame").orEmpty())
+            val out = Message.obtain(null, msg.what).apply { data = Bundle().apply { putString("frame", reply.toString()) } }
             try { msg.replyTo?.send(out) } catch (_: RemoteException) {}
         }
     }
+
+    private fun handle(uid: Int, frame: String): JSONObject {
+        val req = runCatching { JSONObject(frame) }.getOrNull() ?: return err("", "invalid_frame")
+        val id = req.optString("id").take(64)
+        if (req.optInt("protocol_major", -1) != 1) return err(id, "unsupported_protocol")
+        val op = req.optString("op")
+        val params = req.optJSONObject("params") ?: JSONObject()
+        val caller = when (val d = authorizer.authorize(uid, op)) {
+            is AuthDecision.Denied -> return err(id, d.code)
+            is AuthDecision.Allowed -> d.caller
+        }
+        return when (op) {
+            "capabilities.get" -> ok(id, JSONObject().put("ops", JSONArray().apply {
+                listOf(NodeStatusCapability.descriptor, SmsSendCapability.descriptor, SmsSendCapability.statusDescriptor,
+                    ConfigCapabilities.export, ConfigCapabilities.import).forEach {
+                    put(JSONObject().put("name", it.name).put("kind", it.kind)
+                        .put("remoteAllowed", it.remoteAllowed).put("requiresConfirm", it.requiresConfirm))
+                }
+            }))
+            SmsSendCapability.OP -> {
+                val r = RemoteSmsQueue.submit(
+                    applicationContext, caller,
+                    requestId = params.optString("requestId"),
+                    to = params.optString("to"),
+                    body = params.optString("body"),
+                    nonce = params.optString("nonce"),
+                    timestampMs = params.optLong("timestampMs", 0L),
+                    ttlMs = if (params.has("ttlMs")) params.optLong("ttlMs") else null,
+                )
+                when (r) {
+                    is RemoteSmsQueue.Result.Accepted ->
+                        ok(id, JSONObject().put("requestId", r.requestId).put("status", "pending"))
+                    is RemoteSmsQueue.Result.Rejected -> err(id, r.code)
+                }
+            }
+            SmsSendCapability.STATUS_OP -> {
+                val st = RemoteSmsQueue.status(caller, params.optString("requestId"))
+                    ?: return err(id, "not_found")
+                ok(id, JSONObject().put("requestId", params.optString("requestId")).put("status", st.name.lowercase()))
+            }
+            else -> err(id, "not_implemented")
+        }
+    }
+
+    private fun ok(id: String, result: JSONObject) = JSONObject().put("id", id).put("ok", true).put("result", result)
+    private fun err(id: String, code: String) = JSONObject().put("id", id).put("ok", false).put("error", code)
 
     override fun onCreate() { super.onCreate(); authorizer = BridgeAuthorizer(this) }
     override fun onBind(intent: Intent): IBinder = Messenger(handler).binder

@@ -56,6 +56,14 @@ not decide or run fleet actions itself.
 4. Turn the switch off to revoke, or tap **Forget**.
    `[screenshot: connected apps]`
 
+### Approving a remote SMS (built, not device-tested)
+1. When an approved fleet app with **Send** permission asks to send an SMS, you get a
+   notification "… wants to send an SMS".
+2. Tap it. You see the app, the recipient and the full message.
+3. Tap **Approve** to send, or **Deny**. If you do nothing, the request expires (default 2 minutes).
+   VictorSMS never sends one of these on its own.
+   `[screenshot: approve SMS]`
+
 ### SMS conversations (planned)
 1. Tap a thread to read it; tap the compose box to reply.
    `[screenshot: thread list]` `[screenshot: thread view]`
@@ -90,7 +98,9 @@ not decide or run fleet actions itself.
 | Permission / role | Why | Status |
 |---|---|---|
 | Default SMS role | Required by Android to send, receive and store SMS/MMS | planned |
-| `SEND_SMS`, `RECEIVE_SMS`, `READ_SMS`, `RECEIVE_MMS` | Send and receive messages | planned |
+| `SEND_SMS` | Send approved remote SMS (declared; runtime grant needed) | built |
+| `POST_NOTIFICATIONS` | Remote SMS approval prompts | built |
+| `RECEIVE_SMS`, `READ_SMS`, `RECEIVE_MMS` | Receive and read messages | planned |
 | `READ_CONTACTS` | Show names instead of numbers; first step of caller lookup | planned |
 | `POST_NOTIFICATIONS` | New-message notifications | planned |
 | Dialer / call-screening role | Optional phone features and blocklist | planned |

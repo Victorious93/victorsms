@@ -178,6 +178,25 @@ Spec: `Victorious93/droidcommand-AI` `docs/specs/UNIFIED_BACKUP.md` (DCA #236).
 - Current state: authorization is real; op handlers return `not_implemented` and the send
   confirmation dialog is not built yet.
 
+## 13. Remote `sms.send` (implemented, not device-tested)
+
+- Capability: `sms.send` `{kind:"action", remoteAllowed:true, requiresConfirm:true}`;
+  `sms.send.status` `{kind:"read", remoteAllowed:true, requiresConfirm:false}`. Both need the
+  `SEND` op group.
+- Request `params`: `{ to, body, requestId, nonce, timestampMs, ttlMs }`.
+  - `nonce`: 128-bit, 32 hex chars, single use. A seen nonce → `replayed_nonce`.
+  - `ttlMs`: default 120000, clamped to 1 s–10 min. Stale or future (>30 s skew) `timestampMs` → `expired`.
+  - `to` must look like a phone number; `body` 1–1600 chars; duplicate `requestId` → `duplicate_request`.
+- Gates (in order): external-control switch ON → paired + approved app (package + cert) → `SEND`
+  group granted → valid envelope → **on-device approval**.
+- Accepted requests return `{requestId, status:"pending"}` and post a high-priority notification.
+  Tapping it opens `ApproveSendActivity` (not exported) with app, recipient and full body;
+  **Approve** sends via `SmsManager`, **Deny** rejects. **Never auto-sent.**
+- `sms.send.status {requestId}` → `pending | sent | denied | expired | failed`, only for the app
+  that created the request (`not_found` otherwise). Unapproved requests become `expired` after `ttlMs`.
+- State is in memory; it is lost if the process dies (pending requests then read `not_found`).
+- `sent` means handed to `SmsManager`; delivery reports are a follow-up.
+
 ## Milestones
 
 1. Scaffold (this PR): Compose shell, theme, icon, CI.
