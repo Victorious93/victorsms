@@ -22,8 +22,27 @@ class BridgeService : Service() {
 
     private val handler = object : Handler(Looper.getMainLooper()) {
         override fun handleMessage(msg: Message) {
-            val reply = handle(msg.sendingUid, msg.data?.getString("frame").orEmpty())
-            val out = Message.obtain(null, msg.what).apply { data = Bundle().apply { putString("frame", reply.toString()) } }
+            // DCA wire (MessengerWire): what=1, Bundle "request" = snake_case BridgeRequest;
+            // reply what=2, Bundle "response". Legacy: Bundle "frame" with {"id","op","params"}.
+            val dca = msg.data?.containsKey(DcaWire.KEY_REQUEST) == true
+            val out = if (dca) {
+                val req = runCatching { JSONObject(msg.data.getString(DcaWire.KEY_REQUEST).orEmpty()) }.getOrNull()
+                val legacy = JSONObject()
+                    .put("protocol_major", req?.optInt("protocol_major", -1) ?: -1)
+                    .put("id", req?.optString("request_id").orEmpty())
+                    .put("op", req?.optString("operation").orEmpty())
+                    .put("params", (req?.optJSONObject("parameters") ?: JSONObject()).also {
+                        if (!it.has("requestId")) it.put("requestId", req?.optString("request_id").orEmpty())
+                    })
+                val r = handle(msg.sendingUid, legacy.toString())
+                val resp = JSONObject().put("protocol_major", 1).put("request_id", r.optString("id")).put("ok", r.optBoolean("ok"))
+                if (r.has("result")) resp.put("result", r.get("result"))
+                if (r.has("error")) resp.put("error", JSONObject().put("code", r.optString("error")))
+                Message.obtain(null, DcaWire.WHAT_RESPONSE).apply { data = Bundle().apply { putString(DcaWire.KEY_RESPONSE, resp.toString()) } }
+            } else {
+                val reply = handle(msg.sendingUid, msg.data?.getString("frame").orEmpty())
+                Message.obtain(null, msg.what).apply { data = Bundle().apply { putString("frame", reply.toString()) } }
+            }
             try { msg.replyTo?.send(out) } catch (_: RemoteException) {}
         }
     }

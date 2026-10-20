@@ -140,6 +140,7 @@ fun LoginScreen(onLoggedIn: () -> Unit, onHelp: () -> Unit, onCancel: (() -> Uni
 fun RoomListScreen(
     onOpen: (accountId: String, roomId: String) -> Unit,
     onOpenSms: (threadId: Long, address: String) -> Unit,
+    onOpenBot: (kind: String) -> Unit = {},
     onHelp: () -> Unit,
     onSettings: () -> Unit,
     onAddAccount: () -> Unit,
@@ -166,8 +167,10 @@ fun RoomListScreen(
         permLauncher.launch(SMS_PERMISSIONS)
     }
     // Unified inbox: SMS threads (newest first) then Matrix rooms from ALL accounts.
-    val entries: List<InboxEntry> = smsThreads.map { InboxEntry.Sms(it) } +
-        roomsByAccount.values.flatten().map { InboxEntry.Matrix(it) }
+    val entries: List<InboxEntry> = listOf(
+        InboxEntry.Bot("summarizer", "Summarizer / triage", "Ask your PC LLM to summarize or triage"),
+        InboxEntry.Bot("fleet", "Fleet (droidcommand-AI)", "Send a command to droidcommand-AI"),
+    ) + smsThreads.map { InboxEntry.Sms(it) } + roomsByAccount.values.flatten().map { InboxEntry.Matrix(it) }
     val scope = rememberCoroutineScope()
     var menu by remember { mutableStateOf(false) }
     Page("Inbox", actions = {
@@ -213,6 +216,7 @@ fun RoomListScreen(
                         when (e) {
                             is InboxEntry.Sms -> onOpenSms(e.t.threadId, e.t.address)
                             is InboxEntry.Matrix -> onOpen(e.r.accountId, e.r.id)
+                            is InboxEntry.Bot -> onOpenBot(e.kind)
                         }
                     }.padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -222,7 +226,7 @@ fun RoomListScreen(
                         Text(e.subtitle, color = Cyan.copy(alpha = 0.6f), fontSize = 12.sp, maxLines = 1)
                     }
                     Text(
-                        e.source.label, color = Charcoal, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                        e.badge, color = Charcoal, fontSize = 11.sp, fontWeight = FontWeight.Bold,
                         modifier = Modifier.background(if (e.source == MessageSource.SMS) Cyan else Magenta, RoundedCornerShape(8.dp))
                             .padding(horizontal = 8.dp, vertical = 2.dp),
                     )
@@ -297,7 +301,7 @@ val SMS_PERMISSIONS = buildList {
 }.toTypedArray()
 
 sealed class InboxEntry {
-    abstract val key: String; abstract val title: String; abstract val subtitle: String; abstract val source: MessageSource
+    abstract val key: String; abstract val title: String; abstract val subtitle: String; abstract val source: MessageSource; open val badge: String get() = source.label
     data class Sms(val t: SmsThread) : InboxEntry() {
         override val key get() = "sms:${t.threadId}"
         override val title get() = t.address
@@ -309,5 +313,10 @@ sealed class InboxEntry {
         override val title get() = r.name
         override val subtitle get() = r.accountId
         override val source get() = r.source
+    }
+    data class Bot(val kind: String, override val title: String, override val subtitle: String) : InboxEntry() {
+        override val key get() = "bot:$kind"
+        override val source get() = MessageSource.MATRIX
+        override val badge get() = "Bot"
     }
 }

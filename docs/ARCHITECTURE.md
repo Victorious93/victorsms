@@ -342,6 +342,30 @@ place a call through its SIM, or receive a mirror of the other's incoming texts.
 - Privacy: tapping Draft sends the persona text and the last 20 messages of that thread to Don's
   PC URL. Nothing is sent otherwise.
 
+## 21. Assistant bots: summarizer + fleet (implemented, not device-tested)
+
+- Two always-pinned inbox rows: **Summarizer / triage** and **Fleet (droidcommand-AI)**.
+- **Summarizer:** in-app chat. Each message is sent to the PC LLM (`PcLlm` /
+  Settings → Assistant & persona). The system prompt asks for a summary, action items and
+  urgency flags. Same endpoint as the persona drafter.
+- **Fleet bot:** in-app chat. Format: `<actionRef> [json-args]`. Calls droidcommand-AI over
+  EXTERNAL_NODE (`DcaClient`):
+  - Action `ai.droidcommand.app.action.BRIDGE`, package `ai.droidcommand.app`
+    (queried in the manifest).
+  - Wire: MessengerWire (`what=1` Bundle `request` / `what=2` Bundle `response`,
+    snake_case `BridgeRequest`: `protocol_major`, `request_id`, `target_node_id`,
+    `operation`, `parameters`).
+  - Operation: `remote.command` with frozen envelope parameters (`targetNodeRef`,
+    `actionRef`, `args`, `nonce`, `timestampMs`, `ttlMs`, `destructive`).
+  - **Local gates:** External control ON, and `ai.droidcommand.app` approved (package +
+    cert) in Connected apps. The reply's `sendingUid` must belong to that package.
+  - VictorSMS **never executes**; DCA decides and may ask for confirmation.
+- This node's id is `victorsms-<32 hex>` (`NodeId`), generated once and stored locally.
+- **Bridge inbound dual-wire:** `BridgeService` still accepts the legacy `frame` Bundle and
+  also the DCA `request`/`response` keys, so either side can talk.
+- Honest limit: if droidcommand-AI's inbound receiver is not exported/live yet (the DCA
+  docs still mark that as pending), the fleet bot reports that the connection was refused.
+
 ## Milestones
 
 1. Scaffold (this PR): Compose shell, theme, icon, CI.

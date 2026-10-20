@@ -160,6 +160,16 @@ Needs your PC on the mesh running an Ollama-compatible LLM (and optionally a voi
 5. With a draft in the box, tap **Voice note**, then **Play**. **Share** it yourself if you want.
    `[screenshot: draft reply]` `[screenshot: voices]`
 
+### Assistant bots (built, not device-tested)
+Two bots sit at the top of the inbox.
+1. **Summarizer / triage:** needs the PC LLM URL (Settings → Assistant & persona). Paste or
+   type messages; it summarizes and lists action items.
+2. **Fleet (droidcommand-AI):** turn on External control and approve **droidcommand-AI** in
+   Settings → Connected apps. Type a command as `actionRef` and optional JSON args, e.g.
+   `lock-tablet {}`. VictorSMS forwards it; **droidcommand-AI decides and may ask you to confirm**.
+   If droidcommand-AI is not installed or its bridge is not live, you will see a clear error.
+   `[screenshot: bots]`
+
 ## Permissions and why
 
 | Permission / role | Why | Status |

@@ -17,6 +17,7 @@
         <package android:name="com.victorious.launch" />
         <package android:name="com.victorious.mesh" />
         <package android:name="com.victorious.matchvictorious" />
+        <package android:name="ai.droidcommand.app" />
     </queries>
 
     <application
