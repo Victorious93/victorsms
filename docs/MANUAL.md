@@ -135,6 +135,20 @@ Use a second phone's SIM from this phone, over the Victorious Mesh.
    Settings → **Caller lookup**. Online lookup is off and no provider is set up.
    `[screenshot: keypad]` `[screenshot: in-call]`
 
+### Twilio alias number (texts built; calls planned; not device-tested)
+A second number you own in **your** Twilio account. It is not spoofing: people see your real
+Twilio number.
+1. In the Twilio console, create an API key. In VictorSMS: Settings → **Twilio alias number**.
+   Enter the Account SID, API key SID and secret, then tap **Save** (stored encrypted).
+2. Tap **Load my numbers** and choose **Use as alias**.
+3. Send a text from the alias on this screen, or tick **Send from alias** in any SMS thread.
+   Twilio charges apply.
+4. **Get a new number:** search (optionally by area code), tap **Buy…**. A dialog shows the
+   monthly cost; nothing is bought unless you tap **Buy** in that dialog.
+5. **SIP:** **Create SIP domain + credentials** sets up `<name>.sip.twilio.com` for future calling.
+   Calling from the alias is **not built yet**.
+   `[screenshot: twilio]`
+
 ## Permissions and why
 
 | Permission / role | Why | Status |
@@ -201,6 +215,9 @@ You can deny any optional permission; the related feature simply stays off.
   droidcommand-AI.
 
 ## Privacy & data handling
+
+- Twilio credentials (if you add them) are stored encrypted on the phone and used only to talk to
+  Twilio over HTTPS. Alias texts go through Twilio's servers.
 
 - Matrix sessions are stored per account, encrypted with a key in the Android Keystore. Tokens
   are never written to logs.

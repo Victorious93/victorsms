@@ -51,6 +51,8 @@ fun SmsThreadScreen(threadId: Long, address: String, initialBody: String = "", o
     var msgs by remember { mutableStateOf(emptyList<SmsMessage>()) }
     var draft by remember { mutableStateOf(initialBody) }
     var status by remember { mutableStateOf<String?>(null) }
+    val twilio = remember { com.victorious.sms.twilio.TwilioCredentials(ctx) }
+    var viaAlias by remember { mutableStateOf(false) }
     LaunchedEffect(threadId) {
         while (threadId >= 0) { msgs = withContext(Dispatchers.IO) { repo.messages(threadId) }; delay(3000) }
     }
@@ -80,13 +82,22 @@ fun SmsThreadScreen(threadId: Long, address: String, initialBody: String = "", o
             }
         }
         status?.let { Text(it, color = Magenta, modifier = Modifier.padding(horizontal = 12.dp)) }
+        if (twilio.isSet() && twilio.aliasNumber.isNotBlank()) {
+            Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.material3.Checkbox(checked = viaAlias, onCheckedChange = { viaAlias = it })
+                Text("Send from alias ${twilio.aliasNumber} (Twilio)", color = MaterialTheme.colorScheme.onBackground, fontSize = 12.sp)
+            }
+        }
         Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(draft, { draft = it }, placeholder = { Text("Text message") }, modifier = Modifier.weight(1f))
             Spacer(Modifier.padding(4.dp))
             Button(enabled = draft.isNotBlank() && to.isNotBlank(), onClick = {
                 val text = draft; val dest = to
                 scope.launch {
-                    val ok = withContext(Dispatchers.IO) { repo.send(dest, text) }
+                    val ok = withContext(Dispatchers.IO) {
+                        if (viaAlias) runCatching { com.victorious.sms.twilio.TwilioClient(twilio).sendSms(twilio.aliasNumber, dest, text) }.isSuccess
+                        else repo.send(dest, text)
+                    }
                     if (ok) { draft = ""; status = null } else status = "Not sent: SMS permission missing or send failed."
                 }
             }) { Text("Send") }
