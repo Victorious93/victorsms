@@ -36,13 +36,9 @@ data class PendingSend(
  * Replayed nonces are rejected. Requests expire after ttlMs.
  */
 object RemoteSmsQueue {
-    const val DEFAULT_TTL_MS = 120_000L
-    const val MAX_TTL_MS = 600_000L
+    const val MAX_TTL_MS = ReplayGuard.MAX_TTL_MS
     private const val CHANNEL = "remote_sms_approval"
     private val requests = ConcurrentHashMap<String, PendingSend>()
-    private val seenNonces = ConcurrentHashMap<String, Long>() // nonce -> expiry
-
-    private val NONCE = Regex("^[0-9a-fA-F]{32}$") // 128-bit hex
     private val PHONE = Regex("^\\+?[0-9]{3,20}$")
 
     sealed class Result {
@@ -57,14 +53,11 @@ object RemoteSmsQueue {
     ): Result {
         sweep(nowMs)
         if (requestId.isBlank() || requestId.length > 64) return Result.Rejected("invalid_parameters")
-        if (!NONCE.matches(nonce)) return Result.Rejected("invalid_nonce")
-        val ttl = (ttlMs ?: DEFAULT_TTL_MS).coerceIn(1_000L, MAX_TTL_MS)
-        if (timestampMs > nowMs + 30_000 || nowMs > timestampMs + ttl) return Result.Rejected("expired")
-        if (seenNonces.containsKey(nonce.lowercase())) return Result.Rejected("replayed_nonce")
         if (!PHONE.matches(to.replace(" ", "").replace("-", ""))) return Result.Rejected("invalid_parameters")
         if (body.isEmpty() || body.length > 1600) return Result.Rejected("invalid_parameters")
         if (requests.containsKey(requestId)) return Result.Rejected("duplicate_request")
-        seenNonces[nonce.lowercase()] = timestampMs + ttl
+        ReplayGuard.check(nonce, timestampMs, ttlMs, nowMs)?.let { return Result.Rejected(it) }
+        val ttl = ReplayGuard.effectiveTtl(ttlMs)
         val p = PendingSend(requestId, caller, to, body, timestampMs + ttl)
         requests[requestId] = p
         notifyApproval(context, p)
@@ -111,7 +104,6 @@ object RemoteSmsQueue {
         requests.values.forEach { if (it.state == SendState.PENDING && nowMs > it.expiresAtMs) it.state = SendState.EXPIRED }
         // Keep finished requests for a while so callers can poll the outcome.
         requests.entries.removeIf { nowMs > it.value.expiresAtMs + MAX_TTL_MS }
-        seenNonces.entries.removeIf { nowMs > it.value + MAX_TTL_MS }
     }
 
     private fun notifyApproval(context: Context, p: PendingSend) {

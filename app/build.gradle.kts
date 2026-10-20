@@ -59,6 +59,16 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     buildFeatures { compose = true }
+
+    // One APK per ABI (the Matrix Rust SDK ships large native libs for every ABI).
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "armeabi-v7a", "x86_64")
+            isUniversalApk = false
+        }
+    }
     // Ship docs/MANUAL.md as an asset for the in-app Help screen.
     sourceSets.getByName("main").assets.srcDir(rootProject.file("docs"))
 }
