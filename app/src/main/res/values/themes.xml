@@ -1,0 +1,7 @@
+<resources>
+    <style name="Theme.VictorSMS" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#FF16181C</item>
+        <item name="android:statusBarColor">#FF16181C</item>
+        <item name="android:navigationBarColor">#FF16181C</item>
+    </style>
+</resources>
