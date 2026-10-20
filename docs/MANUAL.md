@@ -83,9 +83,8 @@ not decide or run fleet actions itself.
 3. Bridged networks need mautrix bridges on your homeserver; see `docs/BRIDGES.md`.
    `[screenshot: unified inbox]`
 
-### Phone: dialer, call screening, blocklist (planned)
+### Phone: dialer (planned)
 1. Optionally set VictorSMS as the default phone app.
-2. Add numbers to the blocklist; blocked calls are silenced or rejected.
 3. Caller names are looked up on the device first, then on Don's PC over the mesh, then online
    only if you turned that on.
    `[screenshot: blocklist]`
@@ -121,6 +120,17 @@ Use a second phone's SIM from this phone, over the Victorious Mesh.
 8. **Revoke pairing** removes the phone completely.
    `[screenshot: paired phones]` `[screenshot: pairing code]`
 
+### Blocking spam calls and texts (built, not device-tested)
+1. Settings → **Blocking & spam** → **Turn on call screening** (Android asks you to confirm).
+2. Add a number and choose **Block** (rejected, no ring), **Silence** (rings silently) or
+   **Allow** (never filtered).
+3. Add spam patterns: a number pattern such as `+1900*`, or tick **Text keyword** to filter texts
+   containing a word into the Spam folder.
+4. In any SMS thread, tap **Block** to block that sender.
+5. Settings → **Spam folder** shows filtered texts. **Not spam** moves the text to your inbox and
+   always allows that sender.
+   `[screenshot: blocking]` `[screenshot: spam folder]`
+
 ## Permissions and why
 
 | Permission / role | Why | Status |
@@ -132,7 +142,8 @@ Use a second phone's SIM from this phone, over the Victorious Mesh.
 | `RECEIVE_MMS`, `RECEIVE_WAP_PUSH` | Required for the default SMS role; MMS download planned | declared |
 | `READ_CONTACTS` | Show names instead of numbers; first step of caller lookup | planned |
 | `POST_NOTIFICATIONS` | New-message notifications | planned |
-| Dialer / call-screening role | Optional phone features and blocklist | planned |
+| Call-screening role | Filters calls using your blocklist | built |
+| Dialer role | Optional phone app features | planned |
 | `INTERNET` | Matrix, mesh and phone-relay traffic | built |
 | Foreground service (special use) | Keeps the phone-relay listener running while you have it on | built |
 

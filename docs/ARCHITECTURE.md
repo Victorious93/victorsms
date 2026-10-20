@@ -259,6 +259,22 @@ place a call through its SIM, or receive a mirror of the other's incoming texts.
   every device.
 - Pending requests are in memory only. The paired-phones list is in EncryptedSharedPreferences.
 
+## 17. Spam call and text blocking (implemented, not device-tested)
+
+- `Blocklist` (EncryptedSharedPreferences, local only): per-number action `BLOCK | SILENCE |
+  ALLOW`, plus spam patterns. A pattern is either a number pattern (`*` = any digits, e.g. `+1900*`)
+  or a text keyword.
+- Decision order: explicit per-number entry (ALLOW wins over patterns) → number patterns → for
+  SMS, keyword patterns → allow.
+- Calls: `ScreeningService` (`CallScreeningService`, `BIND_SCREENING_SERVICE`, needs
+  `ROLE_CALL_SCREENING`). BLOCK = disallow + reject, no notification (still in the call log);
+  SILENCE = ring silently.
+- Texts: in `SmsDeliverReceiver`, BLOCK → app-private **Spam folder** (`spam_sms.json`, max 500),
+  not written to the system inbox and not mirrored; SILENCE → inbox, marked read.
+- UI: Settings → Blocking & spam (role request, numbers, patterns), Settings → Spam folder
+  (Not spam = move to inbox + allow sender; Delete), and **Block** in an SMS thread.
+- No online spam database is used.
+
 ## Milestones
 
 1. Scaffold (this PR): Compose shell, theme, icon, CI.

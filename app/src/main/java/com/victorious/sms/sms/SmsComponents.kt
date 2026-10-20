@@ -18,9 +18,16 @@ class SmsDeliverReceiver : BroadcastReceiver() {
         if (parts.isEmpty()) return
         val address = parts[0].displayOriginatingAddress.orEmpty()
         val body = parts.joinToString("") { it.displayMessageBody.orEmpty() }
+        val decision = com.victorious.sms.block.Blocklist(context).decideSms(address, body)
+        if (decision == com.victorious.sms.block.BlockAction.BLOCK) {
+            // Spam folder (app-private); not written to the system inbox, not mirrored.
+            com.victorious.sms.block.SpamFolder(context).add(
+                com.victorious.sms.block.SpamMessage(address, body, System.currentTimeMillis()))
+            return
+        }
         context.contentResolver.insert(Telephony.Sms.Inbox.CONTENT_URI, ContentValues().apply {
             put(Telephony.Sms.ADDRESS, address); put(Telephony.Sms.BODY, body)
-            put(Telephony.Sms.DATE, System.currentTimeMillis()); put(Telephony.Sms.READ, 0)
+            put(Telephony.Sms.DATE, System.currentTimeMillis()); put(Telephony.Sms.READ, if (decision == com.victorious.sms.block.BlockAction.SILENCE) 1 else 0)
         })
         com.victorious.sms.relay.RelayNode.get(context).mirrorIncoming(address, body) // opt-in per peer only
         // Fleet SMS trigger (whitelist + code word -> forward to droidcommand-AI) is planned, not here.

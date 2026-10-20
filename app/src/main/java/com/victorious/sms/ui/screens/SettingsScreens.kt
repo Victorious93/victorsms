@@ -35,7 +35,7 @@ import com.victorious.sms.ui.theme.Cyan
 import com.victorious.sms.ui.theme.Magenta
 
 @Composable
-fun SettingsScreen(onConnectedApps: () -> Unit, onPairedPhones: () -> Unit = {}, onBack: () -> Unit) {
+fun SettingsScreen(onConnectedApps: () -> Unit, onPairedPhones: () -> Unit = {}, extra: List<Pair<String, () -> Unit>> = emptyList(), onBack: () -> Unit) {
     val ctx = LocalContext.current
     val settings = remember { BridgeSettings(ctx) }
     var ext by remember { mutableStateOf(settings.externalControlEnabled) }
@@ -55,6 +55,10 @@ fun SettingsScreen(onConnectedApps: () -> Unit, onPairedPhones: () -> Unit = {},
             modifier = Modifier.fillMaxWidth().clickable(onClick = onConnectedApps).padding(vertical = 12.dp))
         Text("Paired phones", color = MaterialTheme.colorScheme.onBackground,
             modifier = Modifier.fillMaxWidth().clickable(onClick = onPairedPhones).padding(vertical = 12.dp))
+        extra.forEach { (label, go) ->
+            Text(label, color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.fillMaxWidth().clickable(onClick = go).padding(vertical = 12.dp))
+        }
     }
 }
 
