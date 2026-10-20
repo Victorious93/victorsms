@@ -19,7 +19,13 @@ import org.matrix.rustcomponents.sdk.SyncService
 import java.io.File
 import java.util.UUID
 
-data class RoomSummary(val accountId: String, val id: String, val name: String, val room: Room)
+data class RoomSummary(
+    val accountId: String,
+    val id: String,
+    val name: String,
+    val room: Room,
+    val source: MessageSource = MessageSource.MATRIX,
+)
 
 private class Account(val id: String, val client: Client, val sync: SyncService, val poller: Job)
 
@@ -89,7 +95,10 @@ class MatrixManager(private val context: Context) {
         val job = scope.launch {
             while (isActive) {
                 val list = c.rooms().filter { it.membership() == Membership.JOINED }
-                    .map { RoomSummary(id, it.id(), it.displayName() ?: it.id(), it) }
+                    .map { r ->
+                        val heroes = runCatching { r.heroes().map { h -> h.userId } }.getOrDefault(emptyList())
+                        RoomSummary(id, r.id(), r.displayName() ?: r.id(), r, BridgeDetector.detect(heroes))
+                    }
                     .sortedBy { it.name.lowercase() }
                 _rooms.value = _rooms.value + (id to list)
                 delay(3000)

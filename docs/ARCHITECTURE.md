@@ -197,6 +197,23 @@ Spec: `Victorious93/droidcommand-AI` `docs/specs/UNIFIED_BACKUP.md` (DCA #236).
 - State is in memory; it is lost if the process dies (pending requests then read `not_found`).
 - `sent` means handed to `SmsManager`; delivery reports are a follow-up.
 
+## 14. Native SMS and unified inbox (implemented, not device-tested)
+
+- **Default SMS role:** `RoleManager.ROLE_SMS` on Android 10+, `ACTION_CHANGE_DEFAULT` before.
+- **Required components:** `SmsDeliverReceiver` (`SMS_DELIVER`, `BROADCAST_SMS`; writes to the
+  Inbox provider), `MmsWapPushReceiver` (`WAP_PUSH_DELIVER`, `BROADCAST_WAP_PUSH`; stub, MMS
+  download planned), `HeadlessSmsSendService` (`RESPOND_VIA_MESSAGE`,
+  `SEND_RESPOND_VIA_MESSAGE`), `ComposeSmsActivity` (`SEND`/`SENDTO` for sms/smsto/mms/mmsto).
+- **Read:** `SmsRepository` queries `Telephony.Sms` (latest row per `thread_id`, polled every 5 s).
+- **Send:** `SmsManager.sendMultipartTextMessage`, then written to `Sms.Sent`. Sends are always
+  user-initiated (Send button, respond-via-message, or an approved remote `sms.send`).
+- **Unified inbox:** SMS threads plus Matrix rooms from every account, with a source badge.
+  Bridged-network detection is a hero-user-id prefix heuristic (`BridgeDetector`); reading
+  `m.bridge` state is planned. Matrix rooms are not yet ordered by recency.
+- Bridges are self-hosted (AGPL-3.0, server-side only); see `docs/BRIDGES.md`.
+- The fleet SMS trigger (whitelist + code word → droidcommand-AI) is still planned and is not in
+  `SmsDeliverReceiver`.
+
 ## Milestones
 
 1. Scaffold (this PR): Compose shell, theme, icon, CI.
