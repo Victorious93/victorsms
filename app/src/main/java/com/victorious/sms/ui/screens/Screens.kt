@@ -21,6 +21,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -75,7 +77,7 @@ private fun Page(title: String, actions: @Composable () -> Unit = {}, content: @
 fun SplashScreen(onReady: (loggedIn: Boolean) -> Unit) {
     val ctx = LocalContext.current
     LaunchedEffect(Unit) {
-        val ok = withContext(Dispatchers.IO) { MatrixManager.get(ctx).restore() }
+        val ok = withContext(Dispatchers.IO) { MatrixManager.get(ctx).restoreAll() }
         onReady(ok)
     }
     Box(Modifier.fillMaxSize().background(Charcoal), contentAlignment = Alignment.Center) {
@@ -84,7 +86,7 @@ fun SplashScreen(onReady: (loggedIn: Boolean) -> Unit) {
 }
 
 @Composable
-fun LoginScreen(onLoggedIn: () -> Unit, onHelp: () -> Unit) {
+fun LoginScreen(onLoggedIn: () -> Unit, onHelp: () -> Unit, onCancel: (() -> Unit)? = null) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var hs by remember { mutableStateOf("matrix.org") }
@@ -92,7 +94,10 @@ fun LoginScreen(onLoggedIn: () -> Unit, onHelp: () -> Unit) {
     var pw by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-    Page("VictorSMS", actions = { TextButton(onClick = onHelp) { Text("Help", color = Cyan) } }) {
+    Page("VictorSMS", actions = {
+        onCancel?.let { TextButton(onClick = it) { Text("Cancel", color = Cyan) } }
+        TextButton(onClick = onHelp) { Text("Help", color = Cyan) }
+    }) {
         Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Sign in to your Matrix homeserver", color = MaterialTheme.colorScheme.onBackground)
             OutlinedTextField(hs, { hs = it }, label = { Text("Homeserver") }, singleLine = true,
@@ -125,24 +130,51 @@ fun LoginScreen(onLoggedIn: () -> Unit, onHelp: () -> Unit) {
 }
 
 @Composable
-fun RoomListScreen(onOpen: (String) -> Unit, onHelp: () -> Unit, onLoggedOut: () -> Unit) {
+fun RoomListScreen(
+    onOpen: (accountId: String, roomId: String) -> Unit,
+    onHelp: () -> Unit,
+    onSettings: () -> Unit,
+    onAddAccount: () -> Unit,
+    onNoAccounts: () -> Unit,
+) {
     val ctx = LocalContext.current
     val mgr = MatrixManager.get(ctx)
-    val rooms by mgr.rooms.collectAsState()
+    val accounts by mgr.accountIds.collectAsState()
+    val current by mgr.current.collectAsState()
+    val roomsByAccount by mgr.rooms.collectAsState()
+    val rooms = roomsByAccount[current].orEmpty()
     val scope = rememberCoroutineScope()
+    var menu by remember { mutableStateOf(false) }
     Page("Rooms", actions = {
-        TextButton(onClick = onHelp) { Text("Help", color = Cyan) }
-        TextButton(onClick = {
-            scope.launch { withContext(Dispatchers.IO) { mgr.logout() }; onLoggedOut() }
-        }) { Text("Log out", color = Magenta) }
+        Box {
+            TextButton(onClick = { menu = true }) { Text(current ?: "Accounts", color = Cyan, maxLines = 1) }
+            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                accounts.forEach { id ->
+                    DropdownMenuItem(text = { Text((if (id == current) "● " else "") + id) },
+                        onClick = { mgr.switchTo(id); menu = false })
+                }
+                DropdownMenuItem(text = { Text("Add account") }, onClick = { menu = false; onAddAccount() })
+                current?.let { cur ->
+                    DropdownMenuItem(text = { Text("Remove / log out $cur", color = Magenta) }, onClick = {
+                        menu = false
+                        scope.launch {
+                            withContext(Dispatchers.IO) { mgr.remove(cur) }
+                            if (mgr.accountIds.value.isEmpty()) onNoAccounts()
+                        }
+                    })
+                }
+                DropdownMenuItem(text = { Text("Settings") }, onClick = { menu = false; onSettings() })
+                DropdownMenuItem(text = { Text("Help") }, onClick = { menu = false; onHelp() })
+            }
+        }
     }) {
         if (rooms.isEmpty()) {
             Text("Syncing… no joined rooms yet.", color = MaterialTheme.colorScheme.onBackground,
                 modifier = Modifier.padding(24.dp))
         }
         LazyColumn(Modifier.fillMaxSize()) {
-            items(rooms, key = { it.id }) { r ->
-                Column(Modifier.fillMaxWidth().clickable { onOpen(r.id) }.padding(16.dp)) {
+            items(rooms, key = { it.accountId + it.id }) { r ->
+                Column(Modifier.fillMaxWidth().clickable { onOpen(r.accountId, r.id) }.padding(16.dp)) {
                     Text(r.name, color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.SemiBold)
                     Text(r.id, color = Cyan.copy(alpha = 0.6f), fontSize = 12.sp)
                 }
@@ -152,9 +184,9 @@ fun RoomListScreen(onOpen: (String) -> Unit, onHelp: () -> Unit, onLoggedOut: ()
 }
 
 @Composable
-fun RoomScreen(roomId: String, onBack: () -> Unit) {
+fun RoomScreen(accountId: String, roomId: String, onBack: () -> Unit) {
     val ctx = LocalContext.current
-    val room = remember(roomId) { MatrixManager.get(ctx).client?.getRoom(roomId) }
+    val room = remember(roomId) { runCatching { MatrixManager.get(ctx).client(accountId)?.getRoom(roomId) }.getOrNull() }
     val model = remember(roomId) { room?.let { TimelineModel(it) } }
     val scope = rememberCoroutineScope()
     var draft by remember { mutableStateOf("") }

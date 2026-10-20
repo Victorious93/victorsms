@@ -9,12 +9,12 @@ import org.matrix.rustcomponents.sdk.SlidingSyncVersion
 
 /**
  * Stores the Matrix session in EncryptedSharedPreferences (AES-256, key in Android Keystore).
- * The access token is never logged.
+ * One encrypted file per account. The access token is never logged.
  */
-class SessionStore(context: Context) {
+class SessionStore(context: Context, accountId: String) {
     private val prefs: SharedPreferences = EncryptedSharedPreferences.create(
         context,
-        "matrix_session",
+        "matrix_session_$accountId",
         MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build(),
         EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
         EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
