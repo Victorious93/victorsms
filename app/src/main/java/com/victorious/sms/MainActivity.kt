@@ -59,6 +59,7 @@ class MainActivity : ComponentActivity() {
                                 "Caller lookup" to { nav.navigate("lookup") },
                                 "Twilio alias number" to { nav.navigate("twilio") },
                                 "Assistant & persona" to { nav.navigate("assistant") },
+                                "SMS remote-command trigger" to { nav.navigate("sms_trigger") },
                                 "Phone (keypad + recents)" to {
                                     startActivity(android.content.Intent(this@MainActivity, com.victorious.sms.phone.DialerActivity::class.java))
                                 },
@@ -72,6 +73,7 @@ class MainActivity : ComponentActivity() {
                             else -> com.victorious.sms.ui.screens.SummarizerBotScreen { nav.popBackStack() }
                         }
                     }
+                    composable("sms_trigger") { com.victorious.sms.ui.screens.SmsTriggerScreen { nav.popBackStack() } }
                     composable("assistant") { com.victorious.sms.ui.screens.AssistantSettingsScreen { nav.popBackStack() } }
                     composable("twilio") { com.victorious.sms.ui.screens.TwilioScreen { nav.popBackStack() } }
                     composable("lookup") { com.victorious.sms.ui.screens.LookupSettingsScreen { nav.popBackStack() } }

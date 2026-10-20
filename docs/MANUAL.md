@@ -170,6 +170,16 @@ Two bots sit at the top of the inbox.
    If droidcommand-AI is not installed or its bridge is not live, you will see a clear error.
    `[screenshot: bots]`
 
+### SMS remote-command trigger (built, not device-tested)
+Let a text message from a trusted phone ask droidcommand-AI to do something. VictorSMS only
+forwards; it never runs the command.
+1. Turn on External control and approve **droidcommand-AI** in Connected apps.
+2. Settings → **SMS remote-command trigger**. Turn it on (it is off by default).
+3. Set a secret **code word** and add the allowed sender numbers to the whitelist.
+4. An SMS must come from a whitelisted number **and** contain the code word. Then VictorSMS
+   forwards it. The code word and whitelist are stored encrypted and are never exported or logged.
+   `[screenshot: sms trigger]`
+
 ## Permissions and why
 
 | Permission / role | Why | Status |
@@ -193,14 +203,13 @@ You can deny any optional permission; the related feature simply stays off.
 
 - **Remote control is OFF by default.** You must enable it in settings and can revoke it any time.
   Every remote action is written to an audit log. (planned)
-- **SMS-triggered flow (planned):** an incoming SMS is treated as a fleet trigger only when
-  **both** are true:
+- **SMS-triggered flow (built, not device-tested):** Settings → SMS remote-command trigger
+  (off by default). An incoming SMS is treated as a fleet trigger only when **both** are true:
   1. the sender is on your **sender whitelist**, **and**
   2. the message contains your **secret code word**.
-  If both match, VictorSMS **forwards** the request to droidcommand-AI. **VictorSMS never
-  executes actions itself.** droidcommand-AI checks its own authorization, confirmation and
-  replay rules. The trigger details (sender, matched keyword) are informational only and are not
-  used for authorization.
+  If both match, VictorSMS **forwards** `sms.remote_command.forward` to droidcommand-AI.
+  **VictorSMS never executes actions itself.** The trigger details (sender, matched keyword) are
+  informational only and are not used for authorization.
 - **Connected apps (built):** each fleet app is identified by its package name and signing
   certificate, checked by Android, not by what the app claims. Unknown apps get "not paired".
   Nothing is allowed until you approve the app and choose its permissions, and all of it sits
@@ -236,6 +245,9 @@ You can deny any optional permission; the related feature simply stays off.
   droidcommand-AI.
 
 ## Privacy & data handling
+
+- The SMS trigger code word and sender whitelist are stored encrypted, never logged, and refused
+  by config export.
 
 - Draft reply sends the persona text and the last 20 messages of that thread to **your PC URL
   only**, and only when you tap it. Voice notes send only the draft text and the voice id.
