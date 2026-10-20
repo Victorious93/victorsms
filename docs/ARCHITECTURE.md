@@ -275,6 +275,25 @@ place a call through its SIM, or receive a mirror of the other's incoming texts.
   (Not spam = move to inbox + allow sender; Delete), and **Block** in an SMS thread.
 - No online spam database is used.
 
+## 18. Phone dialer (implemented, not device-tested)
+
+- **Role:** `ROLE_DIALER`. Requirements met: `DialerActivity` handles `DIAL` and `DIAL`/`VIEW tel:`;
+  `VictorInCallService` (`BIND_INCALL_SERVICE`, `IN_CALL_SERVICE_UI` + `IN_CALL_SERVICE_RINGING`).
+- **Keypad + recents:** `DialerActivity` (keypad, `TelecomManager.placeCall`, needs `CALL_PHONE`)
+  and a call log from `CallLog.Calls` (`READ_CALL_LOG`).
+- **In-call screen:** `InCallActivity` shows over the lock screen. It offers answer/decline, mute
+  (`setMuted`), speaker/earpiece (`setAudioRoute`), hold/resume, a DTMF keypad and end. State comes
+  from `CallManager` (one active call; call waiting/conference are not handled yet).
+- **Caller lookup order (`CallerLookup`):**
+  1. device contacts (`PhoneLookup`, `READ_CONTACTS`) and local lists (blocklist labels);
+  2. Don's PC over the mesh: `GET {pcUrl}?number=…` → `{"name":"…"}`. The URL is configurable
+     in Settings → Caller lookup and empty (off) by default. 2.5 s timeout. Stub contract only; no
+     PC server ships with the app;
+  3. an optional online provider (`OnlineLookupProvider`). **Off by default and none is
+     configured.** A paid provider needs Don's approval before it is added.
+- Cleartext HTTP is allowed (`usesCleartextTraffic`) so mesh endpoints like `http://100.64.x.x`
+  work. The mesh is WireGuard-encrypted; use https for anything off the mesh.
+
 ## Milestones
 
 1. Scaffold (this PR): Compose shell, theme, icon, CI.

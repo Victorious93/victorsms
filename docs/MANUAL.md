@@ -83,12 +83,6 @@ not decide or run fleet actions itself.
 3. Bridged networks need mautrix bridges on your homeserver; see `docs/BRIDGES.md`.
    `[screenshot: unified inbox]`
 
-### Phone: dialer (planned)
-1. Optionally set VictorSMS as the default phone app.
-3. Caller names are looked up on the device first, then on Don's PC over the mesh, then online
-   only if you turned that on.
-   `[screenshot: blocklist]`
-
 ### Bots: assistant, bridge, voice (planned)
 1. Open the bot room and chat. Offload to the PC happens only with your consent.
    `[screenshot: bot room]`
@@ -131,6 +125,16 @@ Use a second phone's SIM from this phone, over the Victorious Mesh.
    always allows that sender.
    `[screenshot: blocking]` `[screenshot: spam folder]`
 
+### Phone app: keypad, calls, recents (built, not device-tested)
+1. Settings → **Phone (keypad + recents)** → **Make VictorSMS your phone app**, then allow the
+   Phone, Call log and Contacts permissions.
+2. **Keypad:** type a number and tap **Call**. **Recents:** tap an entry to put it on the keypad.
+3. During a call: **Mute**, **Speaker**, **Hold**, **Keypad** (for menus) and **End call**.
+   Incoming calls show **Answer** / **Decline**, even on the lock screen.
+4. The caller's name comes from your contacts first, then from your PC if you set a lookup URL in
+   Settings → **Caller lookup**. Online lookup is off and no provider is set up.
+   `[screenshot: keypad]` `[screenshot: in-call]`
+
 ## Permissions and why
 
 | Permission / role | Why | Status |
@@ -140,10 +144,11 @@ Use a second phone's SIM from this phone, over the Victorious Mesh.
 | Default SMS role | Required by Android to receive and store SMS | built |
 | `RECEIVE_SMS`, `READ_SMS` | Receive and show your texts | built |
 | `RECEIVE_MMS`, `RECEIVE_WAP_PUSH` | Required for the default SMS role; MMS download planned | declared |
-| `READ_CONTACTS` | Show names instead of numbers; first step of caller lookup | planned |
 | `POST_NOTIFICATIONS` | New-message notifications | planned |
 | Call-screening role | Filters calls using your blocklist | built |
-| Dialer role | Optional phone app features | planned |
+| Dialer role, `CALL_PHONE` | Be your phone app and place calls | built |
+| `READ_CALL_LOG` | Recents list | built |
+| `READ_CONTACTS` | Caller names (first lookup step) | built |
 | `INTERNET` | Matrix, mesh and phone-relay traffic | built |
 | Foreground service (special use) | Keeps the phone-relay listener running while you have it on | built |
 
