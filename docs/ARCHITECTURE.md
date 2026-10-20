@@ -136,6 +136,67 @@ Spec: `Victorious93/droidcommand-AI` `docs/specs/UNIFIED_BACKUP.md` (DCA #236).
 - Code: `com.victorious.sms.bridge.ConfigBackup.kt` (`ConfigCapabilities`, `ForbiddenKeyScanner`,
   `ConfigExporter`, `ConfigImporter` skeleton).
 
+## 11. Matrix client choice (implemented, not device-tested)
+
+- **Library:** `org.matrix.rustcomponents:sdk-android` **26.10.15** from Maven Central (official
+  Matrix Rust SDK Kotlin/UniFFI bindings, **Apache-2.0**). Pulls JNA (Apache-2.0 / LGPL-2.1 dual,
+  used under Apache-2.0) and kotlinx-coroutines (Apache-2.0). The AAR is ~105 MB because it bundles
+  native libraries for all ABIs; ABI splits are a follow-up.
+- Chosen over a hand-written REST client because it resolved and gives E2EE, sliding sync and a
+  timeline model for free.
+- Sync uses native simplified sliding sync (`DISCOVER_NATIVE`). The homeserver must support it
+  (recent Synapse / Conduit). Servers without it will log in but not sync.
+- Other deps: `androidx.navigation:navigation-compose` 2.10.2, `androidx.security:security-crypto`
+  1.1.0 (EncryptedSharedPreferences, key in Android Keystore), `kotlinx-coroutines-android` 1.11.0.
+  All Apache-2.0.
+
+### Multi-account
+
+- Several Matrix accounts run at once. Each account has its own homeserver, its own encrypted
+  session file (`matrix_session_<account>`, AES-256-GCM, Keystore master key) and its own SDK
+  store directory. An encrypted `matrix_accounts` list keeps the ids and the current account.
+- Tokens are never logged; login errors only show the exception type.
+- The room list top bar has an account switcher with **Add account** and **Remove / log out**.
+  Logging out affects only the current account and deletes only its session and store.
+
+## 12. Fleet app pairing (EXTERNAL_NODE Messenger bridge)
+
+- Exported `BridgeService` (action `com.victorious.sms.action.BRIDGE`) speaks `Messenger`. Fleet
+  apps (e.g. `com.victorious.launch`, `com.victorious.mesh`, `com.victorious.matchvictorious`)
+  connect here.
+- **Identity:** `Message.sendingUid` → `PackageManager.getPackagesForUid` → signing cert SHA-256
+  (`GET_SIGNING_CERTIFICATES`; multi-signer packages rejected). Never self-reported in the payload.
+- **Registry:** encrypted `PairingRegistry` keyed by package + cert SHA-256. An unknown caller gets
+  `not_paired` and is recorded as a pending entry so Don can review it. A different cert for the
+  same package is a different (unapproved) entry.
+- **Order of checks:** external-control switch (OFF by default → `external_control_disabled`) →
+  paired + approved (`not_paired`) → op group granted (`permission_denied`) → sends always require
+  on-device confirmation (`confirmation_required`).
+- **Op groups:** `READ` (capabilities, `node.status.get`, thread list/read, status) and `SEND`
+  (`sms.send`). Nothing is granted by default.
+- **Settings → Connected apps:** approve or revoke each app individually, tick op groups, or forget it.
+- Current state: authorization is real; op handlers return `not_implemented` and the send
+  confirmation dialog is not built yet.
+
+## 13. Remote `sms.send` (implemented, not device-tested)
+
+- Capability: `sms.send` `{kind:"action", remoteAllowed:true, requiresConfirm:true}`;
+  `sms.send.status` `{kind:"read", remoteAllowed:true, requiresConfirm:false}`. Both need the
+  `SEND` op group.
+- Request `params`: `{ to, body, requestId, nonce, timestampMs, ttlMs }`.
+  - `nonce`: 128-bit, 32 hex chars, single use. A seen nonce → `replayed_nonce`.
+  - `ttlMs`: default 120000, clamped to 1 s–10 min. Stale or future (>30 s skew) `timestampMs` → `expired`.
+  - `to` must look like a phone number; `body` 1–1600 chars; duplicate `requestId` → `duplicate_request`.
+- Gates (in order): external-control switch ON → paired + approved app (package + cert) → `SEND`
+  group granted → valid envelope → **on-device approval**.
+- Accepted requests return `{requestId, status:"pending"}` and post a high-priority notification.
+  Tapping it opens `ApproveSendActivity` (not exported) with app, recipient and full body;
+  **Approve** sends via `SmsManager`, **Deny** rejects. **Never auto-sent.**
+- `sms.send.status {requestId}` → `pending | sent | denied | expired | failed`, only for the app
+  that created the request (`not_found` otherwise). Unapproved requests become `expired` after `ttlMs`.
+- State is in memory; it is lost if the process dies (pending requests then read `not_found`).
+- `sent` means handed to `SmsManager`; delivery reports are a follow-up.
+
 ## Milestones
 
 1. Scaffold (this PR): Compose shell, theme, icon, CI.

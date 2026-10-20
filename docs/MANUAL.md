@@ -1,7 +1,8 @@
 # VictorSMS User Manual
 
-> Current state: **scaffold (v0.1.0)**. Only the Compose shell, theme and icon exist today.
-> Everything else below is marked **(planned)** and describes the intended behavior.
+> Current state: **v0.1.0 dev**. Matrix login, multiple accounts, room list, timeline + send,
+> logout, Help, Settings and Connected apps are **built but not yet tested on a device**.
+> Everything marked **(planned)** describes intended behavior.
 
 ## What VictorSMS is + fleet role
 
@@ -25,11 +26,45 @@ not decide or run fleet actions itself.
 
 ## Features step-by-step
 
-### Home screen (built)
-1. Open the app. The scaffold home screen appears.
-   `[screenshot: home screen]`
+### Sign in to Matrix (built, not device-tested)
+1. Open the app. On first start the sign-in screen appears.
+2. Enter your homeserver (e.g. `matrix.org` or your own server), username and password.
+3. Tap **Sign in**. Your session is stored encrypted on the phone; the password is not stored.
+   Your homeserver must support sliding sync (recent Synapse).
+   `[screenshot: sign-in]`
 
-### Conversations (planned)
+### Multiple accounts (built, not device-tested)
+1. In the room list, tap the account name in the top bar.
+2. Pick another account to switch, or **Add account** to sign in to one more.
+3. **Remove / log out** signs out only the account you are viewing.
+   `[screenshot: account switcher]`
+
+### Rooms and messages (built, not device-tested)
+1. The room list shows the joined rooms of the current account.
+2. Tap a room to open its timeline. Tap **Load older** for history.
+3. Type in the box and tap **Send**.
+   `[screenshot: room list]` `[screenshot: room timeline]`
+
+### Help (built)
+1. Tap **Help** (sign-in screen or account menu) to read this manual in the app.
+
+### Connected apps (built, not device-tested)
+1. Account menu → **Settings**. Turn on **External control** only if you want fleet apps to connect.
+2. Open **Connected apps**. Apps appear after they first try to connect.
+3. Check the package name and cert fingerprint, then approve it and tick what it may do:
+   **Read-only** (status and threads) or **Send**. Every send still asks you to confirm (planned dialog).
+4. Turn the switch off to revoke, or tap **Forget**.
+   `[screenshot: connected apps]`
+
+### Approving a remote SMS (built, not device-tested)
+1. When an approved fleet app with **Send** permission asks to send an SMS, you get a
+   notification "… wants to send an SMS".
+2. Tap it. You see the app, the recipient and the full message.
+3. Tap **Approve** to send, or **Deny**. If you do nothing, the request expires (default 2 minutes).
+   VictorSMS never sends one of these on its own.
+   `[screenshot: approve SMS]`
+
+### SMS conversations (planned)
 1. Tap a thread to read it; tap the compose box to reply.
    `[screenshot: thread list]` `[screenshot: thread view]`
 
@@ -57,19 +92,19 @@ not decide or run fleet actions itself.
    overwrite, or merge by id.
 4. VictorSMS asks you to confirm on the phone before applying. An import never turns on remote control.
 
-### Help / Manual screen (planned)
-1. Open the menu → Help to read this manual inside the app.
 
 ## Permissions and why
 
 | Permission / role | Why | Status |
 |---|---|---|
 | Default SMS role | Required by Android to send, receive and store SMS/MMS | planned |
-| `SEND_SMS`, `RECEIVE_SMS`, `READ_SMS`, `RECEIVE_MMS` | Send and receive messages | planned |
+| `SEND_SMS` | Send approved remote SMS (declared; runtime grant needed) | built |
+| `POST_NOTIFICATIONS` | Remote SMS approval prompts | built |
+| `RECEIVE_SMS`, `READ_SMS`, `RECEIVE_MMS` | Receive and read messages | planned |
 | `READ_CONTACTS` | Show names instead of numbers; first step of caller lookup | planned |
 | `POST_NOTIFICATIONS` | New-message notifications | planned |
 | Dialer / call-screening role | Optional phone features and blocklist | planned |
-| `INTERNET` | Matrix and mesh traffic | planned |
+| `INTERNET` | Matrix and mesh traffic | built |
 
 You can deny any optional permission; the related feature simply stays off.
 
@@ -85,11 +120,20 @@ You can deny any optional permission; the related feature simply stays off.
   executes actions itself.** droidcommand-AI checks its own authorization, confirmation and
   replay rules. The trigger details (sender, matched keyword) are informational only and are not
   used for authorization.
+- **Connected apps (built):** each fleet app is identified by its package name and signing
+  certificate, checked by Android, not by what the app claims. Unknown apps get "not paired".
+  Nothing is allowed until you approve the app and choose its permissions, and all of it sits
+  behind the External control switch.
 - **Status (planned):** droidcommand-AI can ask VictorSMS for its status (`node.status.get`). The
   answer says whether SMS is ready to deliver and whether the app is healthy. It never contains
   message bodies, phone numbers, your code word or your whitelist.
 
 ## Troubleshooting/FAQ
+
+- **Signed in but no rooms appear.** Your homeserver may not support sliding sync. Use a recent
+  Synapse or a server with native sliding sync.
+- **A fleet app says "not_paired".** Turn on External control, then approve the app under
+  Settings → Connected apps.
 
 - **The app only shows a blank/home screen.** Expected: this is the scaffold build.
 - **APK won't install.** Uninstall any older build signed with a different key, then retry.
@@ -101,6 +145,8 @@ You can deny any optional permission; the related feature simply stays off.
 
 ## Privacy & data handling
 
+- Matrix sessions are stored per account, encrypted with a key in the Android Keystore. Tokens
+  are never written to logs.
 - Messages, contacts and the blocklist stay on the device. Nothing goes to third-party clouds by
   default.
 - Offload to Don's PC goes only over the encrypted mesh, only for features you turned on.
