@@ -366,6 +366,25 @@ place a call through its SIM, or receive a mirror of the other's incoming texts.
 - Honest limit: if droidcommand-AI's inbound receiver is not exported/live yet (the DCA
   docs still mark that as pending), the fleet bot reports that the connection was refused.
 
+## 22. SMS remote-command trigger (implemented, not device-tested)
+
+- Ratified contract (`droidcommand-AI` `docs/specs/REMOTE_CONTROL.md`): inbound SMS from a
+  **whitelisted sender AND containing the user-set code word** → VictorSMS forwards
+  `sms.remote_command.forward` to droidcommand-AI. **VictorSMS never executes.**
+- **Settings** (`SmsRemoteTriggerSettings`, EncryptedSharedPreferences `sms_remote_trigger`):
+  enable switch (**OFF by default**), code word, sender whitelist. Empty code word or empty
+  whitelist → nothing matches. Code-word match is a case-sensitive substring of the body.
+- **Forward** (`SmsRemoteTrigger.maybeForward`, called from `SmsDeliverReceiver` on a
+  background thread after spam filtering): gates through `DcaClient` (External control ON +
+  droidcommand-AI approved). Envelope: frozen parameters + informational
+  `trigger:{sourceNumber, matchedKeyword:true, rawExtras:{nodeId}}`. The code word is stripped
+  from the command text before forwarding. Status strings never include the code word, whitelist
+  or body.
+- **Secrets:** the code word and whitelist are never logged and are covered by the
+  `ForbiddenKeyScanner` (export/import refuse). They are not part of `config.export`.
+- Live DCA inbound for `sms.remote_command.forward` may still be pending on the DCA side; a
+  refused connection is reported without leaking secrets.
+
 ## Milestones
 
 1. Scaffold (this PR): Compose shell, theme, icon, CI.
