@@ -64,6 +64,17 @@ Three built-in bots appear as Matrix rooms/users:
 2. **Bridge bot:** helps connect, monitor and troubleshoot mautrix and EXTERNAL_NODE bridges.
 3. **Voice bot:** voice notes, transcription and read-aloud (STT/TTS through offload with consent).
 
+## 6. Phone (planned)
+
+- **Dialer role:** VictorSMS may request `ROLE_DIALER` so it can act as the default phone app
+  (in-call UI via `InCallService`). Optional; SMS works without it.
+- **Call screening + blocklist:** a `CallScreeningService` (via `ROLE_CALL_SCREENING`) checks
+  incoming calls against a local blocklist and can silence, reject, or allow them. The blocklist
+  lives on the device only.
+- **Caller lookup order:** (1) on-device contacts and the local blocklist; (2) Don's PC over the
+  encrypted Victorious mesh, if reachable; (3) an online lookup fallback, **opt-in only** and off
+  by default. If a step is unavailable, the app moves on to the next one or shows the raw number.
+
 ## Milestones
 
 1. Scaffold (this PR): Compose shell, theme, icon, CI.
