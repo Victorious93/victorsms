@@ -294,6 +294,31 @@ place a call through its SIM, or receive a mirror of the other's incoming texts.
 - Cleartext HTTP is allowed (`usesCleartextTraffic`) so mesh endpoints like `http://100.64.x.x`
   work. The mesh is WireGuard-encrypted; use https for anything off the mesh.
 
+## 19. Twilio alias number + SIP (texts implemented; SIP calling stubbed; not device-tested)
+
+- This is a **real second number owned by Don** in his own Twilio account, not spoofing. Texts
+  and calls carry that Twilio number as the sender.
+- **Credentials:** Account SID, API key SID and API key secret in EncryptedSharedPreferences
+  (`twilio_credentials`). They are never logged; errors show only Twilio's message. HTTPS with
+  Basic auth (API key).
+- **REST (`TwilioClient`):**
+  - list numbers: `GET /IncomingPhoneNumbers.json`;
+  - list SIP domains: `GET /SIP/Domains.json`;
+  - create a SIP domain + credential list + credential, then map it for calls and registrations;
+  - search: `GET /AvailablePhoneNumbers/US/Local.json`; price: Pricing API
+    `/v1/PhoneNumbers/Countries/US` (local);
+  - **buy:** `POST /IncomingPhoneNumbers.json`, called only from the explicit cost-confirmation
+    dialog. Never automatic;
+  - **alias SMS:** `POST /Messages.json` (`From` = chosen alias). User-initiated only (Twilio
+    screen or the "Send from alias" checkbox in an SMS thread).
+- **SIP calling: stub (`SipCalling`).** `android.net.sip` is still in SDK 37 but deprecated since
+  API 31 and unsupported on most devices, so it is not used. Linphone and PJSIP are GPL and must
+  not be linked into this Apache-2.0 app. Options for Don to choose:
+  1. **baresip** (BSD-3-Clause) built with the NDK, registering to `<domain>.sip.twilio.com`;
+  2. **Twilio Voice Android SDK** (proprietary Twilio licence, uses Twilio Voice instead of plain SIP);
+  3. a SIP softphone on the PC over the mesh.
+- Costs: alias texts, SIP minutes and numbers are billed by Twilio to Don's account.
+
 ## Milestones
 
 1. Scaffold (this PR): Compose shell, theme, icon, CI.
