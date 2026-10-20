@@ -46,7 +46,13 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import com.victorious.sms.matrix.MatrixManager
+import com.victorious.sms.matrix.MessageSource
+import com.victorious.sms.matrix.RoomSummary
+import com.victorious.sms.sms.SmsRepository
+import com.victorious.sms.sms.SmsThread
 import com.victorious.sms.matrix.TimelineModel
 import com.victorious.sms.ui.theme.AccentGradient
 import com.victorious.sms.ui.theme.Charcoal
@@ -86,7 +92,7 @@ fun SplashScreen(onReady: (loggedIn: Boolean) -> Unit) {
 }
 
 @Composable
-fun LoginScreen(onLoggedIn: () -> Unit, onHelp: () -> Unit, onCancel: (() -> Unit)? = null) {
+fun LoginScreen(onLoggedIn: () -> Unit, onHelp: () -> Unit, onCancel: (() -> Unit)? = null, onSkip: (() -> Unit)? = null) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var hs by remember { mutableStateOf("matrix.org") }
@@ -125,6 +131,7 @@ fun LoginScreen(onLoggedIn: () -> Unit, onHelp: () -> Unit, onCancel: (() -> Uni
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) { Text(if (busy) "Signing in…" else "Sign in") }
+            onSkip?.let { TextButton(onClick = it, modifier = Modifier.fillMaxWidth()) { Text("Skip: use SMS only", color = Cyan) } }
         }
     }
 }
@@ -132,6 +139,7 @@ fun LoginScreen(onLoggedIn: () -> Unit, onHelp: () -> Unit, onCancel: (() -> Uni
 @Composable
 fun RoomListScreen(
     onOpen: (accountId: String, roomId: String) -> Unit,
+    onOpenSms: (threadId: Long, address: String) -> Unit,
     onHelp: () -> Unit,
     onSettings: () -> Unit,
     onAddAccount: () -> Unit,
@@ -142,10 +150,27 @@ fun RoomListScreen(
     val accounts by mgr.accountIds.collectAsState()
     val current by mgr.current.collectAsState()
     val roomsByAccount by mgr.rooms.collectAsState()
-    val rooms = roomsByAccount[current].orEmpty()
+    val smsRepo = remember { SmsRepository(ctx) }
+    var smsThreads by remember { mutableStateOf(emptyList<SmsThread>()) }
+    var smsReady by remember { mutableStateOf(smsRepo.isDefaultSmsApp() && smsRepo.canRead()) }
+    LaunchedEffect(smsReady) {
+        while (true) {
+            smsThreads = withContext(Dispatchers.IO) { smsRepo.threads() }
+            kotlinx.coroutines.delay(5000)
+        }
+    }
+    val permLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        smsReady = smsRepo.isDefaultSmsApp() && smsRepo.canRead()
+    }
+    val roleLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        permLauncher.launch(SMS_PERMISSIONS)
+    }
+    // Unified inbox: SMS threads (newest first) then Matrix rooms from ALL accounts.
+    val entries: List<InboxEntry> = smsThreads.map { InboxEntry.Sms(it) } +
+        roomsByAccount.values.flatten().map { InboxEntry.Matrix(it) }
     val scope = rememberCoroutineScope()
     var menu by remember { mutableStateOf(false) }
-    Page("Rooms", actions = {
+    Page("Inbox", actions = {
         Box {
             TextButton(onClick = { menu = true }) { Text(current ?: "Accounts", color = Cyan, maxLines = 1) }
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
@@ -168,15 +193,39 @@ fun RoomListScreen(
             }
         }
     }) {
-        if (rooms.isEmpty()) {
-            Text("Syncing… no joined rooms yet.", color = MaterialTheme.colorScheme.onBackground,
-                modifier = Modifier.padding(24.dp))
+        if (!smsReady) {
+            Row(Modifier.fillMaxWidth().background(CharcoalSurface).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Make VictorSMS your SMS app to see texts here.", color = MaterialTheme.colorScheme.onBackground,
+                    fontSize = 13.sp, modifier = Modifier.weight(1f))
+                TextButton(onClick = {
+                    val i = smsRepo.requestDefaultRoleIntent()
+                    if (i != null) roleLauncher.launch(i) else permLauncher.launch(SMS_PERMISSIONS)
+                }) { Text("Set up", color = Cyan) }
+            }
+        }
+        if (entries.isEmpty()) {
+            Text("No conversations yet.", color = MaterialTheme.colorScheme.onBackground, modifier = Modifier.padding(24.dp))
         }
         LazyColumn(Modifier.fillMaxSize()) {
-            items(rooms, key = { it.accountId + it.id }) { r ->
-                Column(Modifier.fillMaxWidth().clickable { onOpen(r.accountId, r.id) }.padding(16.dp)) {
-                    Text(r.name, color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.SemiBold)
-                    Text(r.id, color = Cyan.copy(alpha = 0.6f), fontSize = 12.sp)
+            items(entries, key = { it.key }) { e ->
+                Row(
+                    Modifier.fillMaxWidth().clickable {
+                        when (e) {
+                            is InboxEntry.Sms -> onOpenSms(e.t.threadId, e.t.address)
+                            is InboxEntry.Matrix -> onOpen(e.r.accountId, e.r.id)
+                        }
+                    }.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(e.title, color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                        Text(e.subtitle, color = Cyan.copy(alpha = 0.6f), fontSize = 12.sp, maxLines = 1)
+                    }
+                    Text(
+                        e.source.label, color = Charcoal, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                        modifier = Modifier.background(if (e.source == MessageSource.SMS) Cyan else Magenta, RoundedCornerShape(8.dp))
+                            .padding(horizontal = 8.dp, vertical = 2.dp),
+                    )
                 }
             }
         }
@@ -237,5 +286,27 @@ fun HelpScreen(onBack: () -> Unit) {
             text, color = MaterialTheme.colorScheme.onBackground, fontFamily = FontFamily.Monospace, fontSize = 13.sp,
             modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         )
+    }
+}
+
+val SMS_PERMISSIONS = buildList {
+    add(android.Manifest.permission.READ_SMS); add(android.Manifest.permission.SEND_SMS)
+    add(android.Manifest.permission.RECEIVE_SMS)
+    if (android.os.Build.VERSION.SDK_INT >= 33) add(android.Manifest.permission.POST_NOTIFICATIONS)
+}.toTypedArray()
+
+sealed class InboxEntry {
+    abstract val key: String; abstract val title: String; abstract val subtitle: String; abstract val source: MessageSource
+    data class Sms(val t: SmsThread) : InboxEntry() {
+        override val key get() = "sms:${t.threadId}"
+        override val title get() = t.address
+        override val subtitle get() = t.snippet
+        override val source get() = MessageSource.SMS
+    }
+    data class Matrix(val r: RoomSummary) : InboxEntry() {
+        override val key get() = "mx:${r.accountId}:${r.id}"
+        override val title get() = r.name
+        override val subtitle get() = r.accountId
+        override val source get() = r.source
     }
 }

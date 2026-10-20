@@ -64,12 +64,23 @@ not decide or run fleet actions itself.
    VictorSMS never sends one of these on its own.
    `[screenshot: approve SMS]`
 
-### SMS conversations (planned)
-1. Tap a thread to read it; tap the compose box to reply.
-   `[screenshot: thread list]` `[screenshot: thread view]`
+### Text messaging (SMS) (built, not device-tested)
+1. In the inbox, tap **Set up** on the banner. Android asks whether VictorSMS should be your
+   default SMS app; accept, then allow the SMS (and notification) permissions.
+2. Your SMS threads appear in the inbox with a cyan **SMS** badge. Tap one to read it.
+3. Type in the box and tap **Send**. VictorSMS only sends SMS when you tap Send (or approve a
+   remote request, see below).
+4. Links like `sms:` / `smsto:` from other apps open a new message. "Reply with text" on incoming
+   calls is supported.
+5. MMS (pictures) are not downloaded yet (planned). You can use SMS without any Matrix account:
+   tap **Skip: use SMS only** on the sign-in screen.
+   `[screenshot: sms thread]`
 
-### Unified inbox with network badges (planned)
-1. Bridged rooms show a network icon (WhatsApp, Signal, …).
+### Unified inbox (built, not device-tested)
+1. The inbox shows SMS threads (newest first) followed by Matrix rooms from **all** your accounts.
+2. Each row has a badge: **SMS**, **Matrix**, or the bridged network (**WhatsApp**, **Telegram**,
+   **Signal**, **Messenger**, **Instagram**, **Discord**, **Google Messages**).
+3. Bridged networks need mautrix bridges on your homeserver; see `docs/BRIDGES.md`.
    `[screenshot: unified inbox]`
 
 ### Phone: dialer, call screening, blocklist (planned)
@@ -97,10 +108,11 @@ not decide or run fleet actions itself.
 
 | Permission / role | Why | Status |
 |---|---|---|
-| Default SMS role | Required by Android to send, receive and store SMS/MMS | planned |
-| `SEND_SMS` | Send approved remote SMS (declared; runtime grant needed) | built |
+| `SEND_SMS` | Send texts you write, and remote SMS you approve | built |
 | `POST_NOTIFICATIONS` | Remote SMS approval prompts | built |
-| `RECEIVE_SMS`, `READ_SMS`, `RECEIVE_MMS` | Receive and read messages | planned |
+| Default SMS role | Required by Android to receive and store SMS | built |
+| `RECEIVE_SMS`, `READ_SMS` | Receive and show your texts | built |
+| `RECEIVE_MMS`, `RECEIVE_WAP_PUSH` | Required for the default SMS role; MMS download planned | declared |
 | `READ_CONTACTS` | Show names instead of numbers; first step of caller lookup | planned |
 | `POST_NOTIFICATIONS` | New-message notifications | planned |
 | Dialer / call-screening role | Optional phone features and blocklist | planned |
@@ -129,6 +141,11 @@ You can deny any optional permission; the related feature simply stays off.
   message bodies, phone numbers, your code word or your whitelist.
 
 ## Troubleshooting/FAQ
+
+- **No SMS threads in the inbox.** Tap **Set up** and make VictorSMS the default SMS app, then
+  allow the SMS permission.
+- **A WhatsApp/Telegram room shows as "Matrix".** Detection relies on the bridges' default user
+  name prefixes; see `docs/BRIDGES.md`.
 
 - **Signed in but no rooms appear.** Your homeserver may not support sliding sync. Use a recent
   Synapse or a server with native sliding sync.

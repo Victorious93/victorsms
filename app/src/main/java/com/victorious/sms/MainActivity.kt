@@ -10,6 +10,7 @@ import androidx.navigation.compose.rememberNavController
 import com.victorious.sms.ui.screens.ConnectedAppsScreen
 import com.victorious.sms.ui.screens.HelpScreen
 import com.victorious.sms.ui.screens.SettingsScreen
+import com.victorious.sms.ui.screens.SmsThreadScreen
 import com.victorious.sms.ui.screens.LoginScreen
 import com.victorious.sms.ui.screens.RoomListScreen
 import com.victorious.sms.ui.screens.RoomScreen
@@ -22,16 +23,20 @@ class MainActivity : ComponentActivity() {
         setContent {
             VictorSMSTheme {
                 val nav = rememberNavController()
+                val composeTo = intent?.getStringExtra(EXTRA_COMPOSE_TO).orEmpty()
+                val composeBody = intent?.getStringExtra(EXTRA_COMPOSE_BODY).orEmpty()
                 NavHost(nav, startDestination = "splash") {
                     composable("splash") {
                         SplashScreen { ok ->
                             nav.navigate(if (ok) "rooms" else "login") { popUpTo("splash") { inclusive = true } }
+                            if (composeTo.isNotEmpty() || composeBody.isNotEmpty()) nav.navigate("sms_new")
                         }
                     }
                     composable("login") {
                         LoginScreen(
                             onLoggedIn = { nav.navigate("rooms") { popUpTo(0) } },
                             onHelp = { nav.navigate("help") },
+                            onSkip = { nav.navigate("rooms") { popUpTo(0) } },
                         )
                     }
                     composable("add_account") {
@@ -48,6 +53,7 @@ class MainActivity : ComponentActivity() {
                     composable("rooms") {
                         RoomListScreen(
                             onOpen = { acc, id -> nav.navigate("room/" + Uri.encode(acc) + "/" + Uri.encode(id)) },
+                            onOpenSms = { tid, addr -> nav.navigate("sms/$tid/" + Uri.encode(addr)) },
                             onHelp = { nav.navigate("help") },
                             onSettings = { nav.navigate("settings") },
                             onAddAccount = { nav.navigate("add_account") },
@@ -60,9 +66,23 @@ class MainActivity : ComponentActivity() {
                             Uri.decode(entry.arguments?.getString("id").orEmpty()),
                         ) { nav.popBackStack() }
                     }
+                    composable("sms/{tid}/{addr}") { e ->
+                        SmsThreadScreen(
+                            e.arguments?.getString("tid")?.toLongOrNull() ?: -1L,
+                            Uri.decode(e.arguments?.getString("addr").orEmpty()),
+                        ) { nav.popBackStack() }
+                    }
+                    composable("sms_new") {
+                        SmsThreadScreen(-1L, composeTo, composeBody) { nav.popBackStack() }
+                    }
                     composable("help") { HelpScreen { nav.popBackStack() } }
                 }
             }
         }
+    }
+
+    companion object {
+        const val EXTRA_COMPOSE_TO = "compose_to"
+        const val EXTRA_COMPOSE_BODY = "compose_body"
     }
 }
