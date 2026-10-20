@@ -58,6 +58,12 @@ fun SmsThreadScreen(threadId: Long, address: String, initialBody: String = "", o
         Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(if (threadId >= 0) to else "New SMS", color = Cyan, fontSize = 22.sp, fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f))
+            if (threadId >= 0) {
+                TextButton(onClick = {
+                    com.victorious.sms.block.Blocklist(ctx).set(to, com.victorious.sms.block.BlockAction.BLOCK)
+                    status = "Blocked $to. Manage in Settings → Blocking & spam."
+                }) { Text("Block", color = Magenta) }
+            }
             TextButton(onClick = onBack) { Text("Back", color = Cyan) }
         }
         if (threadId < 0) {

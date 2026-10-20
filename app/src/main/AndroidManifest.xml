@@ -74,6 +74,14 @@
             </intent-filter>
         </activity>
         <service
+            android:name=".block.ScreeningService"
+            android:exported="true"
+            android:permission="android.permission.BIND_SCREENING_SERVICE">
+            <intent-filter>
+                <action android:name="android.telecom.CallScreeningService" />
+            </intent-filter>
+        </service>
+        <service
             android:name=".relay.RelayService"
             android:exported="false"
             android:foregroundServiceType="specialUse">
