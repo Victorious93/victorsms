@@ -75,6 +75,67 @@ Three built-in bots appear as Matrix rooms/users:
   encrypted Victorious mesh, if reachable; (3) an online lookup fallback, **opt-in only** and off
   by default. If a step is unavailable, the app moves on to the next one or shows the raw number.
 
+## 7. In-app Help / Manual
+
+- The app **must** include an in-app Help/Manual screen that shows `docs/MANUAL.md` content.
+- **Keeping the manual current is part of done:** any PR that adds or changes a user-visible
+  feature, permission or fleet behavior updates `docs/MANUAL.md` in the same PR.
+
+## 8. Remote-command envelope (ratified)
+
+Remote commands from droidcommand-AI use this envelope:
+
+```json
+{
+  "requestId": "string",
+  "targetNodeRef": "string",
+  "actionRef": "string",
+  "args": {},
+  "nonce": "128-bit unique value",
+  "timestampMs": 0,
+  "ttlMs": 120000,
+  "destructive": false,
+  "trigger": { "sourceNumber": "...", "matchedKeyword": "...", "rawExtras": {} }
+}
+```
+
+- `nonce` is 128-bit and unique per request (replay protection). `ttlMs` defaults to `120000`.
+- `trigger` is **informational only** and is **not** used for authorization.
+- SMS triggers need a whitelisted sender **and** the secret code word; VictorSMS then forwards to
+  droidcommand-AI and never executes actions itself.
+
+## 9. `node.status.get`
+
+Spec: `Victorious93/droidcommand-AI` `docs/specs/STATUS_TRAY.md` (frozen contract).
+
+- Advertised in `capabilities.get` as
+  `{"name":"node.status.get","kind":"read","remoteAllowed":true,"requiresConfirm":false}`.
+- Returns one `NodeStatusSnapshot`:
+  `{ nodeId, packageName, connectionClass, updatedAtMs, domains: [{ name, state, detail? }] }`
+  with `connectionClass = "EXTERNAL_NODE"`, `packageName = "com.victorious.sms"`.
+- Domains: `sms` (ready to **deliver**, not authorization: `ok` when the default SMS role and
+  SMS permissions are held, else `degraded`/`down`) and `node_health` (`ok` while the process answers).
+- States: `ok | degraded | down | unknown | off`; `detail` max 200 chars.
+- **Never** includes message bodies, phone numbers, the code word or the whitelist.
+- Uses the same envelope and authorization (pairing, external-control toggle, replay) as remote control.
+- Code: `com.victorious.sms.bridge` (`NodeStatusSnapshot`, `StatusDomain`, `NodeStatusProvider`,
+  `NodeStatusCapability`). No live bind yet.
+
+## 10. `config.export` / `config.import`
+
+Spec: `Victorious93/droidcommand-AI` `docs/specs/UNIFIED_BACKUP.md` (DCA #236).
+
+- Capabilities: `config.export` `{kind:"action", remoteAllowed:false, requiresConfirm:false}`;
+  `config.import` `{kind:"action", remoteAllowed:false, requiresConfirm:true}`.
+- Export entry: `{ packageName, schemaVersion, payload }` inside the controller's bundle (envelope `version` 1).
+- **Never exported:** code word, sender whitelist, Matrix tokens, phone numbers, message bodies (also
+  passwords, keys, cookies, API tokens). A forbidden-name scan (case-insensitive substrings, `_`/`-`
+  ignored) refuses export **and** import with `invalid_parameters` instead of silently stripping.
+- Import: `dryRun` (validate and report only), `conflictPolicy` `skip` (default) | `overwrite` |
+  `merge-by-id`; requires on-device confirmation; **never** auto-enables `remote.command` / external control.
+- Code: `com.victorious.sms.bridge.ConfigBackup.kt` (`ConfigCapabilities`, `ForbiddenKeyScanner`,
+  `ConfigExporter`, `ConfigImporter` skeleton).
+
 ## Milestones
 
 1. Scaffold (this PR): Compose shell, theme, icon, CI.
