@@ -66,6 +66,12 @@ class MainActivity : ComponentActivity() {
                         ) { nav.popBackStack() }
                     }
                     composable("blocking") { BlockingScreen { nav.popBackStack() } }
+                    composable("bot/{kind}") { e ->
+                        when (e.arguments?.getString("kind")) {
+                            "fleet" -> com.victorious.sms.ui.screens.FleetBotScreen { nav.popBackStack() }
+                            else -> com.victorious.sms.ui.screens.SummarizerBotScreen { nav.popBackStack() }
+                        }
+                    }
                     composable("assistant") { com.victorious.sms.ui.screens.AssistantSettingsScreen { nav.popBackStack() } }
                     composable("twilio") { com.victorious.sms.ui.screens.TwilioScreen { nav.popBackStack() } }
                     composable("lookup") { com.victorious.sms.ui.screens.LookupSettingsScreen { nav.popBackStack() } }
@@ -76,6 +82,7 @@ class MainActivity : ComponentActivity() {
                         RoomListScreen(
                             onOpen = { acc, id -> nav.navigate("room/" + Uri.encode(acc) + "/" + Uri.encode(id)) },
                             onOpenSms = { tid, addr -> nav.navigate("sms/$tid/" + Uri.encode(addr)) },
+                            onOpenBot = { kind -> nav.navigate("bot/$kind") },
                             onHelp = { nav.navigate("help") },
                             onSettings = { nav.navigate("settings") },
                             onAddAccount = { nav.navigate("add_account") },
