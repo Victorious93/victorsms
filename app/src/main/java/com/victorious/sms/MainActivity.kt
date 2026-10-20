@@ -56,10 +56,15 @@ class MainActivity : ComponentActivity() {
                             extra = listOf(
                                 "Blocking & spam" to { nav.navigate("blocking") },
                                 "Spam folder" to { nav.navigate("spam") },
+                                "Caller lookup" to { nav.navigate("lookup") },
+                                "Phone (keypad + recents)" to {
+                                    startActivity(android.content.Intent(this@MainActivity, com.victorious.sms.phone.DialerActivity::class.java))
+                                },
                             ),
                         ) { nav.popBackStack() }
                     }
                     composable("blocking") { BlockingScreen { nav.popBackStack() } }
+                    composable("lookup") { com.victorious.sms.ui.screens.LookupSettingsScreen { nav.popBackStack() } }
                     composable("spam") { SpamFolderScreen { nav.popBackStack() } }
                     composable("paired_phones") { PairedPhonesScreen { nav.popBackStack() } }
                     composable("connected_apps") { ConnectedAppsScreen { nav.popBackStack() } }
