@@ -262,6 +262,7 @@ fun RoomScreen(accountId: String, roomId: String, onBack: () -> Unit) {
                 }
                 item { TextButton(onClick = { scope.launch(Dispatchers.IO) { model.loadMore() } }) { Text("Load older", color = Cyan) } }
             }
+            AssistBar(room?.displayName() ?: roomId, { msgs.map { it.mine to it.body } }, draft) { draft = it }
             Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(draft, { draft = it }, placeholder = { Text("Message") }, modifier = Modifier.weight(1f))
                 Spacer(Modifier.padding(4.dp))

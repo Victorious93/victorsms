@@ -149,6 +149,17 @@ Twilio number.
    Calling from the alias is **not built yet**.
    `[screenshot: twilio]`
 
+### Draft replies in your style + voice notes (built, not device-tested)
+Needs your PC on the mesh running an Ollama-compatible LLM (and optionally a voice server).
+1. Settings → **Assistant & persona**. Enter the LLM URL (e.g. `http://100.64.0.2:11434`) and model.
+2. **Import** your `persona.md`, chat exports, or a `.zip` of them.
+3. In a thread, tap **Draft reply**. The draft appears in the message box. **Review and edit it;
+   it is never sent automatically.**
+4. **Voice notes:** enter the voice URL, then add a voice. You must declare it is **your own
+   voice** or that the person gave **explicit consent** (who, how and when). No other voices can be used.
+5. With a draft in the box, tap **Voice note**, then **Play**. **Share** it yourself if you want.
+   `[screenshot: draft reply]` `[screenshot: voices]`
+
 ## Permissions and why
 
 | Permission / role | Why | Status |
@@ -215,6 +226,9 @@ You can deny any optional permission; the related feature simply stays off.
   droidcommand-AI.
 
 ## Privacy & data handling
+
+- Draft reply sends the persona text and the last 20 messages of that thread to **your PC URL
+  only**, and only when you tap it. Voice notes send only the draft text and the voice id.
 
 - Twilio credentials (if you add them) are stored encrypted on the phone and used only to talk to
   Twilio over HTTPS. Alias texts go through Twilio's servers.
