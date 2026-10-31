@@ -27,7 +27,7 @@ class ApproveCallActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val id = intent.getStringExtra(EXTRA_ID).orEmpty()
-        val c = RemoteCallQueue.get(id)
+        val c = RemoteCallQueue.get(applicationContext, id)
         setContent {
             VictorSMSTheme {
                 Column(Modifier.fillMaxSize().background(Charcoal).safeDrawingPadding().padding(24.dp),

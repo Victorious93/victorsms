@@ -11,6 +11,7 @@ import android.os.Build
 import android.telephony.SmsManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import org.json.JSONObject
 import java.util.concurrent.ConcurrentHashMap
 
 object SmsSendCapability {
@@ -34,11 +35,50 @@ data class PendingSend(
 /**
  * Remote sms.send requests. Each one waits for an on-device Approve; nothing is ever auto-sent.
  * Replayed nonces are rejected. Requests expire after ttlMs.
+ * Requests are persisted encrypted ([EncryptedPendingStore], "pending_sms") with their expiry, so an
+ * approval notification still works after process death; expired records are purged on load/sweep.
  */
 object RemoteSmsQueue {
     const val MAX_TTL_MS = ReplayGuard.MAX_TTL_MS
     private const val CHANNEL = "remote_sms_approval"
     private val requests = ConcurrentHashMap<String, PendingSend>()
+    @Volatile private var store: PendingStore? = null
+
+    /** Attach the encrypted store once and restore unexpired requests. */
+    fun ensureLoaded(context: Context) {
+        if (store != null) return
+        synchronized(this) {
+            if (store != null) return
+            val st = runCatching<PendingStore> { EncryptedPendingStore(context.applicationContext, "pending_sms") }
+                .getOrElse { MemoryPendingStore() }
+            attachStore(st)
+        }
+    }
+
+    /** Test seam: replace the store and reload from it. */
+    @Synchronized
+    internal fun attachStore(st: PendingStore, nowMs: Long = System.currentTimeMillis()) {
+        requests.clear()
+        st.loadAll().forEach { (id, json) ->
+            val p = decode(json)
+            if (p == null || p.requestId != id || nowMs > p.expiresAtMs + MAX_TTL_MS) st.remove(id)
+            else requests[id] = p
+        }
+        store = st
+        sweep(nowMs)
+    }
+
+    internal fun encode(p: PendingSend): String = JSONObject().put("requestId", p.requestId)
+        .put("pkg", p.caller.packageName).put("cert", p.caller.certSha256).put("to", p.to).put("body", p.body)
+        .put("expiresAtMs", p.expiresAtMs).put("state", p.state.name).toString()
+
+    internal fun decode(json: String): PendingSend? = runCatching {
+        val o = JSONObject(json)
+        PendingSend(o.getString("requestId"), CallerIdentity(o.getString("pkg"), o.getString("cert")),
+            o.getString("to"), o.getString("body"), o.getLong("expiresAtMs"), SendState.valueOf(o.getString("state")))
+    }.getOrNull()
+
+    private fun persist(p: PendingSend) { store?.put(p.requestId, encode(p)) }
     private val PHONE = Regex("^\\+?[0-9]{3,20}$")
 
     sealed class Result {
@@ -51,6 +91,16 @@ object RemoteSmsQueue {
         context: Context, caller: CallerIdentity, requestId: String, to: String, body: String,
         nonce: String, timestampMs: Long, ttlMs: Long?, nowMs: Long = System.currentTimeMillis(),
     ): Result {
+        ensureLoaded(context)
+        return submitInternal(caller, requestId, to, body, nonce, timestampMs, ttlMs, nowMs) { notifyApproval(context, it) }
+    }
+
+    /** Core of [submit] without Android; [notify] shows the on-device approval prompt. Never sends. */
+    @Synchronized
+    internal fun submitInternal(
+        caller: CallerIdentity, requestId: String, to: String, body: String,
+        nonce: String, timestampMs: Long, ttlMs: Long?, nowMs: Long, notify: (PendingSend) -> Unit,
+    ): Result {
         sweep(nowMs)
         if (requestId.isBlank() || requestId.length > 64) return Result.Rejected("invalid_parameters")
         if (!PHONE.matches(to.replace(" ", "").replace("-", ""))) return Result.Rejected("invalid_parameters")
@@ -60,7 +110,8 @@ object RemoteSmsQueue {
         val ttl = ReplayGuard.effectiveTtl(ttlMs)
         val p = PendingSend(requestId, caller, to, body, timestampMs + ttl)
         requests[requestId] = p
-        notifyApproval(context, p)
+        persist(p)
+        notify(p)
         return Result.Accepted(requestId)
     }
 
@@ -72,14 +123,29 @@ object RemoteSmsQueue {
     }
 
     fun get(requestId: String): PendingSend? = requests[requestId]
+    fun get(context: Context, requestId: String): PendingSend? { ensureLoaded(context); return requests[requestId] }
 
     /** Called only from the on-device approval UI. */
     fun approve(context: Context, requestId: String, nowMs: Long = System.currentTimeMillis()): SendState {
+        ensureLoaded(context)
+        val st = decide(requestId, nowMs) { p -> sendNow(context, p) }
+        cancelNotification(context, requestId)
+        return st
+    }
+
+    /** Approve path without Android: [send] runs at most once, only for a PENDING, unexpired request. */
+    internal fun decide(requestId: String, nowMs: Long, send: (PendingSend) -> SendState): SendState {
         val p = requests[requestId] ?: return SendState.EXPIRED
         synchronized(p) {
             if (p.state != SendState.PENDING) return p.state
-            if (nowMs > p.expiresAtMs) { p.state = SendState.EXPIRED; return p.state }
-            p.state = try {
+            if (nowMs > p.expiresAtMs) { p.state = SendState.EXPIRED; persist(p); return p.state }
+            p.state = send(p)
+            persist(p)
+        }
+        return p.state
+    }
+
+    private fun sendNow(context: Context, p: PendingSend): SendState = try {
                 if (context.checkSelfPermission(Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
                     SendState.FAILED
                 } else {
@@ -90,20 +156,23 @@ object RemoteSmsQueue {
                     SendState.SENT
                 }
             } catch (e: Exception) { SendState.FAILED }
-        }
-        cancelNotification(context, requestId)
-        return p.state
-    }
 
     fun deny(context: Context, requestId: String) {
-        requests[requestId]?.let { synchronized(it) { if (it.state == SendState.PENDING) it.state = SendState.DENIED } }
+        ensureLoaded(context)
+        denyInternal(requestId)
         cancelNotification(context, requestId)
+    }
+
+    internal fun denyInternal(requestId: String) {
+        requests[requestId]?.let { synchronized(it) { if (it.state == SendState.PENDING) { it.state = SendState.DENIED; persist(it) } } }
     }
 
     private fun sweep(nowMs: Long) {
-        requests.values.forEach { if (it.state == SendState.PENDING && nowMs > it.expiresAtMs) it.state = SendState.EXPIRED }
+        requests.values.forEach { if (it.state == SendState.PENDING && nowMs > it.expiresAtMs) { it.state = SendState.EXPIRED; persist(it) } }
         // Keep finished requests for a while so callers can poll the outcome.
-        requests.entries.removeIf { nowMs > it.value.expiresAtMs + MAX_TTL_MS }
+        requests.entries.filter { nowMs > it.value.expiresAtMs + MAX_TTL_MS }.forEach {
+            requests.remove(it.key); store?.remove(it.key)
+        }
     }
 
     private fun notifyApproval(context: Context, p: PendingSend) {

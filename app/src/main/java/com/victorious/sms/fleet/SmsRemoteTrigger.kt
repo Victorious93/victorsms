@@ -29,13 +29,27 @@ class SmsRemoteTriggerSettings(context: Context) {
     fun whitelist(): Set<String> = p.getStringSet("whitelist", emptySet())!!.map { Blocklist.normalize(it) }.filter { it.isNotBlank() }.toSet()
     fun setWhitelist(numbers: Set<String>) = p.edit().putStringSet("whitelist", numbers.map { Blocklist.normalize(it) }.filter { it.isNotBlank() }.toSet()).apply()
 
-    fun isWhitelisted(number: String) = Blocklist.normalize(number) in whitelist()
+    fun isWhitelisted(number: String) = SmsTriggerGate.isWhitelisted(whitelist(), number)
 
     /** Case-sensitive substring of the body. Empty code word never matches. */
-    fun matchesCodeWord(body: String): Boolean {
-        val w = codeWord
-        return w.isNotEmpty() && body.contains(w)
+    fun matchesCodeWord(body: String): Boolean = SmsTriggerGate.matchesCodeWord(codeWord, body)
+}
+
+/** Pure gate logic (unit-tested). Forward only if enabled AND sender whitelisted AND code word present. */
+object SmsTriggerGate {
+    fun isWhitelisted(whitelist: Set<String>, number: String): Boolean {
+        val n = Blocklist.normalize(number)
+        return n.isNotBlank() && whitelist.any { Blocklist.normalize(it) == n }
     }
+
+    fun matchesCodeWord(codeWord: String, body: String): Boolean = codeWord.isNotEmpty() && body.contains(codeWord)
+
+    fun shouldForward(enabled: Boolean, whitelist: Set<String>, codeWord: String, sender: String, body: String): Boolean =
+        enabled && isWhitelisted(whitelist, sender) && matchesCodeWord(codeWord, body)
+
+    /** Command text with the code word stripped, so DCA never sees it. */
+    fun commandText(codeWord: String, body: String): String =
+        body.replace(codeWord, " ").trim().replace(Regex("\\s+"), " ")
 }
 
 /**
@@ -47,10 +61,10 @@ object SmsRemoteTrigger {
 
     fun maybeForward(context: Context, sourceNumber: String, body: String): String? {
         val s = SmsRemoteTriggerSettings(context)
-        if (!s.enabled) return null
-        if (!s.isWhitelisted(sourceNumber) || !s.matchesCodeWord(body)) return null
+        val codeWord = s.codeWord
+        if (!SmsTriggerGate.shouldForward(s.enabled, s.whitelist(), codeWord, sourceNumber, body)) return null
         // Strip the code word from the command text so DCA never needs it.
-        val commandText = body.replace(s.codeWord, " ").trim().replace(Regex("\\s+"), " ")
+        val commandText = SmsTriggerGate.commandText(codeWord, body)
         val actionRef = commandText.substringBefore(' ').ifBlank { "sms-command" }
         val args = JSONObject().put("smsCommandText", commandText).put("smsCommandId", actionRef)
         val client = DcaClient(context)

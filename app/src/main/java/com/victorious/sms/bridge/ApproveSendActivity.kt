@@ -27,7 +27,7 @@ class ApproveSendActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val id = intent.getStringExtra(EXTRA_REQUEST_ID).orEmpty()
-        val p = RemoteSmsQueue.get(id)
+        val p = RemoteSmsQueue.get(applicationContext, id)
         setContent {
             VictorSMSTheme {
                 Column(

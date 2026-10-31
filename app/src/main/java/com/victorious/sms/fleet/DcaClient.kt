@@ -56,9 +56,7 @@ class DcaClient(private val context: Context) {
 
     /** Builds the frozen envelope parameters (nonce 128-bit hex, timestampMs, ttlMs 120000). */
     fun envelope(targetNodeRef: String, actionRef: String, args: JSONObject = JSONObject(), destructive: Boolean = false): JSONObject =
-        JSONObject().put("targetNodeRef", targetNodeRef).put("actionRef", actionRef).put("args", args)
-            .put("nonce", ByteArray(16).also { SecureRandom().nextBytes(it) }.joinToString("") { "%02x".format(it) })
-            .put("timestampMs", System.currentTimeMillis()).put("ttlMs", 120_000L).put("destructive", destructive)
+        FleetEnvelope.build(targetNodeRef, actionRef, args, destructive)
 
     /** Blocking request/response. Call off the main thread. */
     fun call(operation: String, targetNodeId: String, parameters: JSONObject, timeoutMs: Long = 10_000): Result {
