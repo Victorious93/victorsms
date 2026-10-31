@@ -1,6 +1,8 @@
 package com.victorious.sms.assist
 
 import android.content.Context
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -15,6 +17,23 @@ class PcSettings(context: Context) {
     var llmModel: String get() = p.getString("llmModel", "llama3.1").orEmpty(); set(v) = p.edit().putString("llmModel", v.trim()).apply()
     /** TTS / voice-clone endpoint, e.g. a Chatterbox wrapper: POST {"text","voice"} -> audio bytes */
     var ttsUrl: String get() = p.getString("ttsUrl", "").orEmpty(); set(v) = p.edit().putString("ttsUrl", v.trim()).apply()
+
+    private val secret by lazy {
+        EncryptedSharedPreferences.create(
+            context, "pc_endpoints_secret",
+            MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build(),
+            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+        )
+    }
+    /** Bearer token printed once by pc/setup.sh. Encrypted at rest, never logged. Empty = no header. */
+    var token: String get() = secret.getString("token", "").orEmpty(); set(v) = secret.edit().putString("token", v.trim()).apply()
+}
+
+/** Adds `Authorization: Bearer` when a PC token is set. */
+internal fun HttpURLConnection.pcAuth(s: PcSettings) {
+    val t = s.token
+    if (t.isNotEmpty()) setRequestProperty("Authorization", "Bearer $t")
 }
 
 data class ChatMsg(val role: String, val content: String)
@@ -27,7 +46,7 @@ object PcLlm {
             .put("messages", JSONArray().apply { messages.forEach { put(JSONObject().put("role", it.role).put("content", it.content)) } })
         val c = URL(s.llmUrl + "/api/chat").openConnection() as HttpURLConnection
         c.requestMethod = "POST"; c.doOutput = true; c.connectTimeout = 5_000; c.readTimeout = 120_000
-        c.setRequestProperty("Content-Type", "application/json")
+        c.setRequestProperty("Content-Type", "application/json"); c.pcAuth(s)
         try {
             c.outputStream.use { it.write(body.toString().toByteArray()) }
             if (c.responseCode != 200) throw IllegalStateException("LLM endpoint returned HTTP ${c.responseCode}")
@@ -43,7 +62,7 @@ object PcTts {
         require(s.ttsUrl.startsWith("http")) { "Set the PC voice URL in Settings → Assistant & persona" }
         val c = URL(s.ttsUrl).openConnection() as HttpURLConnection
         c.requestMethod = "POST"; c.doOutput = true; c.connectTimeout = 5_000; c.readTimeout = 180_000
-        c.setRequestProperty("Content-Type", "application/json")
+        c.setRequestProperty("Content-Type", "application/json"); c.pcAuth(s)
         try {
             c.outputStream.use { it.write(JSONObject().put("text", text).put("voice", voice.pcVoiceId).toString().toByteArray()) }
             if (c.responseCode != 200) throw IllegalStateException("Voice endpoint returned HTTP ${c.responseCode}")

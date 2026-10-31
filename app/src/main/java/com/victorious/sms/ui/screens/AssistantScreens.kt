@@ -72,6 +72,9 @@ fun AssistantSettingsScreen(onBack: () -> Unit) {
         OutlinedTextField(llm, { llm = it; s.llmUrl = it }, label = { Text("LLM URL (Ollama-compatible)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(model, { model = it; s.llmModel = it }, label = { Text("Model") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(tts, { tts = it; s.ttsUrl = it }, label = { Text("Voice URL (Chatterbox wrapper)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        var tok by remember { mutableStateOf(if (s.token.isEmpty()) "" else "••••••••") }
+        OutlinedTextField(tok, { tok = it; if (!it.startsWith("•")) s.token = it }, label = { Text("PC token (from pc/setup.sh)") }, singleLine = true,
+            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
 
         Text("Persona", color = Cyan, fontWeight = FontWeight.SemiBold)
         Text("$personaLen characters imported (persona.md, .txt, .json/.csv chat exports, or a .zip of them).", color = onBg, fontSize = 12.sp)
