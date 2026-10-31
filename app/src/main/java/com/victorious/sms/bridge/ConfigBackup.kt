@@ -2,14 +2,14 @@ package com.victorious.sms.bridge
 
 /**
  * config.export / config.import (droidcommand-AI docs/specs/UNIFIED_BACKUP.md, DCA #236).
- * Not wired to a live op or confirm UI yet; the policy logic (scanner, importer, merge-by-id) is unit-tested.
+ * Live ops and the on-device confirm screen are in ConfigOps / ConfirmImportActivity.
  */
 object ConfigCapabilities {
     const val EXPORT = "config.export"
     const val IMPORT = "config.import"
     val export = CapabilityDescriptor(EXPORT, kind = "action", remoteAllowed = false, requiresConfirm = false)
     val import = CapabilityDescriptor(IMPORT, kind = "action", remoteAllowed = false, requiresConfirm = true)
-    val all = listOf(NodeStatusCapability.descriptor, export, import)
+    val all = listOf(NodeStatusCapability.descriptor, export, import, ConfigOps.statusDescriptor)
 }
 
 /** Thrown when a payload contains a forbidden key. Maps to `invalid_parameters`. */

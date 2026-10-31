@@ -17,7 +17,11 @@ import org.matrix.rustcomponents.sdk.Room
 import org.matrix.rustcomponents.sdk.SlidingSyncVersionBuilder
 import org.matrix.rustcomponents.sdk.SyncService
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
+import java.net.URLEncoder
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 data class RoomSummary(
     val accountId: String,
@@ -34,6 +38,7 @@ private class Account(val id: String, val client: Client, val sync: SyncService,
  * SDK store directory. Logout/remove affects one account only.
  */
 class MatrixManager(private val context: Context) {
+    private companion object { const val BRIDGE_TTL_MS = 10 * 60_000L }
     private val registry = AccountRegistry(context)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val accounts = linkedMapOf<String, Account>()
@@ -45,6 +50,41 @@ class MatrixManager(private val context: Context) {
     /** Rooms per account id. */
     private val _rooms = MutableStateFlow<Map<String, List<RoomSummary>>>(emptyMap())
     val rooms: StateFlow<Map<String, List<RoomSummary>>> = _rooms
+
+    /** Bridge badge per account|room, refreshed at most every [BRIDGE_TTL_MS]. */
+    private val bridgeCache = ConcurrentHashMap<String, Pair<MessageSource, Long>>()
+
+    private suspend fun bridgeSource(c: Client, accountId: String, r: Room, heroes: List<String>): MessageSource {
+        val key = accountId + "|" + r.id()
+        bridgeCache[key]?.let { (src, at) -> if (System.currentTimeMillis() - at < BRIDGE_TTL_MS) return src }
+        val state = runCatching { bridgeStateContents(c, r.id()) }.getOrDefault(emptyList())
+        val members = runCatching {
+            val it = r.membersNoSync()
+            it.nextChunk(it.len())?.map { m -> m.userId }.orEmpty()
+        }.getOrDefault(emptyList())
+        val src = BridgeDetector.resolve(state, members, heroes)
+        bridgeCache[key] = src to System.currentTimeMillis()
+        return src
+    }
+
+    /**
+     * Reads m.bridge / uk.half-shot.bridge state (empty state key) via the client-server API, because the
+     * FFI cannot build custom StateEventTypes. The access token goes only to the account's own homeserver
+     * and is never logged.
+     */
+    private fun bridgeStateContents(c: Client, roomId: String): List<String> {
+        val s = c.session()
+        val room = URLEncoder.encode(roomId, "UTF-8")
+        return BridgeDetector.STATE_EVENT_TYPES.mapNotNull { type ->
+            val u = URL(s.homeserverUrl.trimEnd('/') + "/_matrix/client/v3/rooms/$room/state/" + URLEncoder.encode(type, "UTF-8") + "/")
+            val h = u.openConnection() as HttpURLConnection
+            try {
+                h.connectTimeout = 5_000; h.readTimeout = 5_000
+                h.setRequestProperty("Authorization", "Bearer " + s.accessToken)
+                if (h.responseCode == 200) h.inputStream.bufferedReader().use { it.readText() } else null
+            } finally { h.disconnect() }
+        }
+    }
 
     private fun dirs(key: String) =
         File(context.filesDir, "matrix/$key") to File(context.cacheDir, "matrix/$key")
@@ -97,7 +137,7 @@ class MatrixManager(private val context: Context) {
                 val list = c.rooms().filter { it.membership() == Membership.JOINED }
                     .map { r ->
                         val heroes = runCatching { r.heroes().map { h -> h.userId } }.getOrDefault(emptyList())
-                        RoomSummary(id, r.id(), r.displayName() ?: r.id(), r, BridgeDetector.detect(heroes))
+                        RoomSummary(id, r.id(), r.displayName() ?: r.id(), r, bridgeSource(c, id, r, heroes))
                     }
                     .sortedBy { it.name.lowercase() }
                 _rooms.value = _rooms.value + (id to list)

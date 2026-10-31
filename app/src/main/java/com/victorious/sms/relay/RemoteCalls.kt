@@ -35,6 +35,7 @@ object RemoteCallQueue {
 
     /** Encrypted persistence ("pending_calls") with per-record expiry; restores after process death. */
     fun ensureLoaded(context: Context) {
+        ReplayGuard.ensureLoaded(context)
         if (store != null) return
         synchronized(this) {
             if (store != null) return
