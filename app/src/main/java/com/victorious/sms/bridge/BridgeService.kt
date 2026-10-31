@@ -82,6 +82,7 @@ class BridgeService : Service() {
                 }
             }
             SmsSendCapability.STATUS_OP -> {
+                RemoteSmsQueue.ensureLoaded(applicationContext)
                 val st = RemoteSmsQueue.status(caller, params.optString("requestId"))
                     ?: return err(id, "not_found")
                 ok(id, JSONObject().put("requestId", params.optString("requestId")).put("status", st.name.lowercase()))

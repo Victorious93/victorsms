@@ -106,6 +106,33 @@ sealed class AuthDecision {
     data class Denied(val code: String) : AuthDecision()
 }
 
+/**
+ * Pure pairing/authorization policy (unit-tested). A caller matches only when BOTH package name and
+ * signing-cert SHA-256 match an approved entry. Unknown identities are returned in [toRecordPending].
+ */
+object PairingPolicy {
+    data class Outcome(val decision: AuthDecision, val toRecordPending: List<CallerIdentity> = emptyList())
+
+    fun normalizeCert(c: String) = c.replace(":", "").lowercase()
+
+    fun matches(app: PairedApp, id: CallerIdentity) =
+        app.packageName == id.packageName && normalizeCert(app.certSha256) == normalizeCert(id.certSha256)
+
+    fun decide(externalControlEnabled: Boolean, ids: List<CallerIdentity>, paired: List<PairedApp>, op: String): Outcome {
+        if (!externalControlEnabled) return Outcome(AuthDecision.Denied("external_control_disabled"))
+        if (ids.isEmpty()) return Outcome(AuthDecision.Denied("not_paired"))
+        val app = ids.firstNotNullOfOrNull { id -> paired.firstOrNull { matches(it, id) } }
+        if (app == null || !app.approved) {
+            val unknown = ids.filter { id -> paired.none { matches(it, id) } }
+            return Outcome(AuthDecision.Denied("not_paired"), unknown)
+        }
+        val group = opGroupOf(op) ?: return Outcome(AuthDecision.Denied("unsupported_operation"))
+        if (group !in app.groups) return Outcome(AuthDecision.Denied("permission_denied"))
+        // sms.send always needs on-device approval; there is no autosend path.
+        return Outcome(AuthDecision.Allowed(CallerIdentity(app.packageName, app.certSha256), needsUserConfirm = op == "sms.send"))
+    }
+}
+
 /** Decision logic for an inbound op from a uid. */
 class BridgeAuthorizer(private val context: Context) {
     private val registry = PairingRegistry(context)
@@ -114,17 +141,8 @@ class BridgeAuthorizer(private val context: Context) {
     fun authorize(uid: Int, op: String): AuthDecision {
         if (!settings.externalControlEnabled) return AuthDecision.Denied("external_control_disabled")
         val ids = CallerVerifier.identify(context, uid)
-        if (ids.isEmpty()) return AuthDecision.Denied("not_paired")
-        val app = ids.firstNotNullOfOrNull { registry.find(it) }
-        if (app == null || !app.approved) {
-            ids.forEach { registry.recordPending(it) }
-            return AuthDecision.Denied("not_paired")
-        }
-        val group = opGroupOf(op) ?: return AuthDecision.Denied("unsupported_operation")
-        if (group !in app.groups) return AuthDecision.Denied("permission_denied")
-        return AuthDecision.Allowed(
-            CallerIdentity(app.packageName, app.certSha256),
-            needsUserConfirm = op == "sms.send",
-        )
+        val out = PairingPolicy.decide(true, ids, registry.all(), op)
+        out.toRecordPending.forEach { registry.recordPending(it) }
+        return out.decision
     }
 }

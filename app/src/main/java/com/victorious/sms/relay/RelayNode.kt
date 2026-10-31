@@ -39,10 +39,15 @@ class RelayNode(private val context: Context) {
 
     fun startPairingWindow(ms: Long = 5 * 60_000L) { pairingUntilMs = System.currentTimeMillis() + ms }
     private fun pairing() = System.currentTimeMillis() < pairingUntilMs
-    private fun accept(fp: String) = phones.find(fp) != null || pairing()
+    private fun accept(fp: String) = PeerPin.acceptInbound(fp, phones.all().map { it.fingerprint }, pairing())
 
     fun confirmCandidate() {
         val c = _candidate.value ?: return
+        // Pin: a phone already paired at this address keeps its cert; a different cert is refused.
+        val existing = phones.all().firstOrNull { it.address.isNotBlank() && it.address == c.address }
+        if (existing != null && !PeerPin.matches(existing.fingerprint, c.fingerprint)) {
+            _candidate.value = null; pairingUntilMs = 0; return
+        }
         phones.save(PairedPhone(c.fingerprint, c.name, c.address))
         _candidate.value = null
         pairingUntilMs = 0
@@ -94,7 +99,7 @@ class RelayNode(private val context: Context) {
                 p.optString("address").take(100), code)
             return ok(id, JSONObject().put("name", Build.MODEL))
         }
-        val peer = phones.find(peerFp) ?: return err(id, "not_paired")
+        val peer = phones.all().firstOrNull { PeerPin.matches(it.fingerprint, peerFp) } ?: return err(id, "not_paired")
         return when (op) {
             "relay.sms.send" -> {
                 if (!peer.allowSmsSend) return err(id, "permission_denied")
@@ -106,6 +111,7 @@ class RelayNode(private val context: Context) {
                 }
             }
             "relay.sms.send.status" -> {
+                RemoteSmsQueue.ensureLoaded(context)
                 val st = RemoteSmsQueue.status(CallerIdentity("phone:" + peer.name, peer.fingerprint), p.optString("requestId"))
                     ?: return err(id, "not_found")
                 ok(id, JSONObject().put("status", st.name.lowercase()))
@@ -118,7 +124,7 @@ class RelayNode(private val context: Context) {
                 ok(id, JSONObject().put("requestId", p.optString("requestId")).put("status", "pending"))
             }
             "relay.call.status" -> {
-                val st = RemoteCallQueue.status(peer.fingerprint, p.optString("requestId")) ?: return err(id, "not_found")
+                val st = RemoteCallQueue.status(context, peer.fingerprint, p.optString("requestId")) ?: return err(id, "not_found")
                 ok(id, JSONObject().put("status", st.name.lowercase()))
             }
             "relay.sms.inbox" -> {
@@ -131,15 +137,25 @@ class RelayNode(private val context: Context) {
     }
 
     // ---------------- client ----------------
-    /** Sends one request to [address] (host:port). Runs on the caller's thread (use IO). */
-    fun request(address: String, op: String, params: JSONObject): JSONObject {
+    /** Sends one request to a paired phone, pinned to its cert fingerprint. */
+    fun request(peer: PairedPhone, op: String, params: JSONObject): JSONObject = request(peer.address, op, params, peer.fingerprint)
+
+    /**
+     * Sends one request to [address] (host:port). Runs on the caller's thread (use IO).
+     * [pinnedFp] is required for every op except an initial relay.pair.hello; a mismatching cert fails the
+     * TLS handshake and is re-checked after it.
+     */
+    fun request(address: String, op: String, params: JSONObject, pinnedFp: String? = null): JSONObject {
+        if (op != "relay.pair.hello" && pinnedFp == null) return err("", "not_paired")
         val host = address.substringBeforeLast(":"); val port = address.substringAfterLast(":").toIntOrNull() ?: DEFAULT_PORT
-        val f = RelayCrypto.sslContext(::accept).socketFactory
+        val f = RelayCrypto.sslContext { fp -> PeerPin.acceptOutbound(op, pinnedFp, fp) }.socketFactory
         (f.createSocket() as SSLSocket).use { s ->
             s.enabledProtocols = arrayOf("TLSv1.3")
             s.connect(InetSocketAddress(host, port), 10_000)
             s.soTimeout = 15_000
             s.startHandshake()
+            val actualFp = RelayCrypto.fingerprint(s.session.peerCertificates.first() as X509Certificate)
+            if (!PeerPin.acceptOutbound(op, pinnedFp, actualFp)) return err("", "peer_cert_mismatch")
             val frame = JSONObject().put("protocol_major", 1).put("id", UUID.randomUUID().toString()).put("op", op).put("params", params)
             OutputStreamWriter(s.outputStream, Charsets.UTF_8).apply { write(frame.toString() + "\n"); flush() }
             val line = BufferedReader(InputStreamReader(s.inputStream, Charsets.UTF_8)).readLine() ?: return err("", "no_reply")
@@ -165,7 +181,7 @@ class RelayNode(private val context: Context) {
         val targets = phones.all().filter { it.mirrorInboxToPeer }
         if (targets.isEmpty()) return
         Thread {
-            targets.forEach { t -> runCatching { request(t.address, "relay.sms.inbox", envelope().put("from", from).put("body", body)) } }
+            targets.forEach { t -> runCatching { request(t, "relay.sms.inbox", envelope().put("from", from).put("body", body)) } }
         }.start()
     }
 

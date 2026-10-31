@@ -133,8 +133,13 @@ Spec: `Victorious93/droidcommand-AI` `docs/specs/UNIFIED_BACKUP.md` (DCA #236).
   ignored) refuses export **and** import with `invalid_parameters` instead of silently stripping.
 - Import: `dryRun` (validate and report only), `conflictPolicy` `skip` (default) | `overwrite` |
   `merge-by-id`; requires on-device confirmation; **never** auto-enables `remote.command` / external control.
+  Protected keys (`remote.command*`, `remote_command*`, `externalControlEnabled`) are stripped at every depth.
+- `merge-by-id` (implemented): maps merge key by key; lists whose elements are all maps with an `id`
+  merge element-wise (incoming wins per id, ids only on the device are kept, device order first, new
+  ids appended); anything else is replaced by the incoming value.
 - Code: `com.victorious.sms.bridge.ConfigBackup.kt` (`ConfigCapabilities`, `ForbiddenKeyScanner`,
-  `ConfigExporter`, `ConfigImporter` skeleton).
+  `ConfigExporter`, `ConfigImporter`). Policy logic is unit-tested; the live `config.*` ops and the
+  confirm UI are still not wired.
 
 ## 11. Matrix client choice (implemented, not device-tested)
 
@@ -194,7 +199,10 @@ Spec: `Victorious93/droidcommand-AI` `docs/specs/UNIFIED_BACKUP.md` (DCA #236).
   **Approve** sends via `SmsManager`, **Deny** rejects. **Never auto-sent.**
 - `sms.send.status {requestId}` → `pending | sent | denied | expired | failed`, only for the app
   that created the request (`not_found` otherwise). Unapproved requests become `expired` after `ttlMs`.
-- State is in memory; it is lost if the process dies (pending requests then read `not_found`).
+- Requests are persisted in EncryptedSharedPreferences (`pending_sms`, AES-256-GCM, Keystore master key)
+  with their own expiry, so the approval notification still works after process death. Expired
+  records are marked `expired` and purged `ttlMs + 600 s` later (on load and on every access). Nonces
+  already seen are not persisted; a restored `requestId` still blocks duplicates.
 - `sent` means handed to `SmsManager`; delivery reports are a follow-up.
 
 ## 14. Native SMS and unified inbox (implemented, not device-tested)
@@ -257,7 +265,25 @@ place a call through its SIM, or receive a mirror of the other's incoming texts.
   the mesh, capturing the remote call audio. Android restricts call-audio capture for third-party
   apps, so this likely needs the default dialer role plus `InCallService` and is not guaranteed on
   every device.
-- Pending requests are in memory only. The paired-phones list is in EncryptedSharedPreferences.
+- **Cert pinning after pairing (`PeerPin`):** every outbound request to a paired phone is pinned to
+  that phone's own cert SHA-256 (constant-time compare). A different cert, even one belonging to
+  another paired phone, fails the TLS handshake and is re-checked after it (`peer_cert_mismatch`).
+  Only the first `relay.pair.hello` runs unpinned; non-hello ops without a pin are refused
+  (`not_paired`). Re-pairing a different cert at the address of an already-paired phone is refused;
+  revoke the old pairing first. Inbound: paired certs always, unknown certs only in the pairing window
+  and only for `relay.pair.hello`.
+- Pending relay SMS requests use `pending_sms` (above); pending calls use `pending_calls`
+  (EncryptedSharedPreferences, same expiry rules). The paired-phones list is in EncryptedSharedPreferences.
+
+## Unit tests (JVM, `app/src/test`)
+
+`./gradlew testDebugUnitTest` covers: fleet envelope build/validation (nonce, `ttlMs` 120000,
+timestamp window, `destructive`) and `ReplayGuard`; caller pairing by package + cert
+(`PairingPolicy`); `ForbiddenKeyScanner`, import never enabling `remote.command`, merge-by-id;
+`sms.remote_command.forward` gates (`SmsTriggerGate`: whitelist AND code word, off by default, code
+word stripped); remote `sms.send` approval (never sent without Approve, exactly once, expiry, replay,
+persistence); relay `PeerPin` and pending-call persistence. Android glue (Keystore, TLS sockets,
+notifications, `SmsManager`) is not covered and is still not device-tested.
 
 ## 17. Spam call and text blocking (implemented, not device-tested)
 

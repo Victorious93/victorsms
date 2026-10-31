@@ -141,14 +141,14 @@ private fun RelayActions(node: RelayNode, p: PairedPhone) {
     fun poll(statusOp: String, requestId: String) = scope.launch(Dispatchers.IO) {
         repeat(40) {
             delay(3000)
-            val r = runCatching { node.request(p.address, statusOp, node.envelope().put("requestId", requestId)) }.getOrNull()
+            val r = runCatching { node.request(p, statusOp, node.envelope().put("requestId", requestId)) }.getOrNull()
             val st = r?.optJSONObject("result")?.optString("status") ?: r?.optString("error") ?: "unreachable"
             status = "Status: $st"
             if (st != "pending") return@launch
         }
     }
     fun send(op: String, statusOp: String, params: org.json.JSONObject) = scope.launch(Dispatchers.IO) {
-        val r = runCatching { node.request(p.address, op, params) }.getOrElse { status = "Could not reach phone"; return@launch }
+        val r = runCatching { node.request(p, op, params) }.getOrElse { status = "Could not reach phone"; return@launch }
         if (r.optBoolean("ok")) { status = "Waiting for approval on ${p.name}…"; poll(statusOp, params.getString("requestId")) }
         else status = "Refused: " + r.optString("error")
     }

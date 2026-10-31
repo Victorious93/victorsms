@@ -93,7 +93,8 @@ not decide or run fleet actions itself.
 2. The export **never** contains your code word, sender whitelist, Matrix tokens, phone numbers or
    message bodies. If any such field is found, the export is refused.
 3. On import you can preview first (dry run) and choose what happens on conflicts: skip (default),
-   overwrite, or merge by id.
+   overwrite, or merge by id. Merge by id combines lists (for example bots) item by item using each
+   item's id, keeping items that exist only on this phone.
 4. VictorSMS asks you to confirm on the phone before applying. An import never turns on remote control.
 
 
@@ -112,6 +113,11 @@ Use a second phone's SIM from this phone, over the Victorious Mesh.
 7. To call: tap **Call via**. The other phone asks for approval, then opens its dialer with the
    number. The call audio stays on that phone for now (audio bridging is planned).
 8. **Revoke pairing** removes the phone completely.
+9. After pairing, this phone only talks to the exact certificate it paired with. If a different
+   device answers at that address, the request fails with `peer_cert_mismatch`. To pair a new or
+   reset phone at the same address, revoke the old pairing first.
+10. Pending approvals survive an app restart until they expire (2 minutes by default). They are
+    stored encrypted on the phone.
    `[screenshot: paired phones]` `[screenshot: pairing code]`
 
 ### Blocking spam calls and texts (built, not device-tested)
@@ -232,6 +238,8 @@ You can deny any optional permission; the related feature simply stays off.
 - **Pair says "Could not connect".** Phone relay must be on on the other phone, both phones must
   be on the mesh, and port 47320 must be reachable.
 - **Pairing refused: not_pairing.** Tap **Wait for pairing** on the other phone first.
+- **peer_cert_mismatch.** The device at that address is not the phone you paired with (or it was
+  reset). Check the address; if the phone was reset, revoke the pairing and pair again.
 - **Install says "app not compatible".** Use the APK for your phone's CPU: almost all modern phones
   use `arm64-v8a`; emulators use `x86_64`.
 
