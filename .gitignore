@@ -14,3 +14,5 @@ captures/
 *.keystore
 !app/debug.keystore
 keystore.properties
+__pycache__/
+*.pyc
