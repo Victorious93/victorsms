@@ -152,6 +152,11 @@
             android:excludeFromRecents="true"
             android:theme="@style/Theme.VictorSMS" />
         <activity
+            android:name=".bridge.ConfirmImportActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.VictorSMS" />
+        <activity
             android:name=".MainActivity"
             android:exported="true">
             <intent-filter>

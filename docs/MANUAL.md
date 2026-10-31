@@ -308,3 +308,9 @@ You can deny any optional permission; the related feature simply stays off.
   a voice or persona from anyone else's recordings. (planned)
 - Status reports to the fleet never include message bodies, phone numbers, the code word or the
   whitelist.
+
+## Config export/import over the bridge
+- `config.export` returns only allowlisted, non-secret settings (assistant LLM/TTS URLs and model, PC lookup URL). The code word, whitelist, tokens, numbers and message bodies are never exported.
+- `config.import` needs a nonce, timestampMs and ttlMs, and is a dry run unless `dryRun:false` is set. A real import is held as pending until you approve it on this phone. Poll it with `config.import.status`. An import can never enable external control or remote commands.
+- Used nonces are now saved encrypted until they expire, so a restart doesn't reopen the replay window.
+- Bridge badges come from the mautrix `m.bridge`/`uk.half-shot.bridge` state first, then from the bridge bot being in the room, and only then from the member-ID prefix.
