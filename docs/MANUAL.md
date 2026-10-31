@@ -175,11 +175,15 @@ legs, registration fees) are billed by Twilio to your account.
 
 ### Draft replies in your style + voice notes (built, not device-tested)
 Needs your PC on the mesh running an Ollama-compatible LLM (and optionally a voice server).
-1. Settings → **Assistant & persona**. Enter the LLM URL (e.g. `http://100.64.0.2:11434`) and model.
+0. On the PC (Ubuntu + AMD GPU), run `pc/setup.sh` once. It prints a **PC token once** and the URLs to use.
+   See [`pc/README.md`](../pc/README.md). (Written and tested without a GPU; not yet run on the real PC.)
+1. Settings → **Assistant & persona**. Enter the LLM URL (e.g. `http://100.64.0.2:8765` with the PC shim),
+   the model, and the **PC token**.
 2. **Import** your `persona.md`, chat exports, or a `.zip` of them.
 3. In a thread, tap **Draft reply**. The draft appears in the message box. **Review and edit it;
    it is never sent automatically.**
-4. **Voice notes:** enter the voice URL, then add a voice. You must declare it is **your own
+4. **Voice notes:** enter the voice URL (e.g. `http://100.64.0.2:8765/tts`), register the voice on the PC
+   with `voicectl.py` (the PC also refuses voices without recorded consent), then add the same voice id here. You must declare it is **your own
    voice** or that the person gave **explicit consent** (who, how and when). No other voices can be used.
 5. With a draft in the box, tap **Voice note**, then **Play**. **Share** it yourself if you want.
    `[screenshot: draft reply]` `[screenshot: voices]`
