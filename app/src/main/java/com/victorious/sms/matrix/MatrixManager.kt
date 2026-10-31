@@ -38,7 +38,6 @@ private class Account(val id: String, val client: Client, val sync: SyncService,
  * SDK store directory. Logout/remove affects one account only.
  */
 class MatrixManager(private val context: Context) {
-    private companion object { const val BRIDGE_TTL_MS = 10 * 60_000L }
     private val registry = AccountRegistry(context)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val accounts = linkedMapOf<String, Account>()
@@ -174,6 +173,7 @@ class MatrixManager(private val context: Context) {
     }
 
     companion object {
+        private const val BRIDGE_TTL_MS = 10 * 60_000L
         @Volatile private var instance: MatrixManager? = null
         fun get(context: Context): MatrixManager =
             instance ?: synchronized(this) {
