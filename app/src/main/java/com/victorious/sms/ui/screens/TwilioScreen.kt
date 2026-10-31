@@ -43,7 +43,11 @@ fun TwilioScreen(onBack: () -> Unit) {
     var sid by remember { mutableStateOf(creds.accountSid) }
     var keySid by remember { mutableStateOf(creds.apiKeySid) }
     var secret by remember { mutableStateOf("") }
-    var alias by remember { mutableStateOf(creds.aliasNumber) }
+    var aliases by remember { mutableStateOf(creds.aliases) }
+    var alias by remember { mutableStateOf(aliases.firstOrNull().orEmpty()) }
+    var myPhone by remember { mutableStateOf(creds.myPhone) }
+    var defaultId by remember { mutableStateOf(creds.defaultIdentity) }
+    var confirmSend by remember { mutableStateOf<Triple<String, String, String?>?>(null) }
     var numbers by remember { mutableStateOf(emptyList<TwilioNumber>()) }
     var domains by remember { mutableStateOf(emptyList<SipDomain>()) }
     var info by remember { mutableStateOf<String?>(null) }
@@ -55,6 +59,7 @@ fun TwilioScreen(onBack: () -> Unit) {
     var buying by remember { mutableStateOf<Pair<AvailableNumber, String?>?>(null) }
     var to by remember { mutableStateOf("") }
     var body by remember { mutableStateOf("") }
+    var pendingBody by remember { mutableStateOf("") }
 
     fun run(label: String, block: suspend () -> String) = scope.launch {
         info = "$label…"
@@ -70,7 +75,7 @@ fun TwilioScreen(onBack: () -> Unit) {
             singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { creds.accountSid = sid; creds.apiKeySid = keySid; if (secret.isNotBlank()) creds.apiKeySecret = secret; secret = ""; info = "Saved." }) { Text("Save") }
-            TextButton(onClick = { creds.clear(); sid = ""; keySid = ""; alias = ""; info = "Credentials removed." }) { Text("Remove", color = Magenta) }
+            TextButton(onClick = { creds.clear(); sid = ""; keySid = ""; alias = ""; aliases = emptySet(); myPhone = ""; info = "Credentials removed." }) { Text("Remove", color = Magenta) }
         }
         info?.let { Text(it, color = Cyan, fontSize = 12.sp) }
 
@@ -79,19 +84,39 @@ fun TwilioScreen(onBack: () -> Unit) {
         numbers.forEach { n ->
             Row(Modifier.fillMaxWidth()) {
                 Text("${n.phoneNumber}  ${n.friendlyName}", color = onBg, modifier = Modifier.weight(1f))
-                TextButton(onClick = { creds.aliasNumber = n.phoneNumber; alias = n.phoneNumber }) {
-                    Text(if (alias == n.phoneNumber) "Alias ✓" else "Use as alias", color = Cyan)
-                }
+                val on = n.phoneNumber in aliases
+                TextButton(onClick = {
+                    aliases = if (on) aliases - n.phoneNumber else aliases + n.phoneNumber
+                    creds.aliases = aliases
+                    if (on && defaultId == com.victorious.sms.twilio.Identity.Alias(n.phoneNumber)) { defaultId = com.victorious.sms.twilio.Identity.Sim; creds.defaultIdentity = defaultId }
+                    if (alias !in aliases) alias = aliases.firstOrNull().orEmpty()
+                }) { Text(if (on) "Alias ✓" else "Use as alias", color = Cyan) }
             }
         }
+        Text("Only numbers listed here (fetched from your Twilio account) can be used as an alias. Several are allowed.", color = onBg, fontSize = 12.sp)
+
+        Text("Default identity", color = Cyan, fontWeight = FontWeight.SemiBold)
+        (listOf(com.victorious.sms.twilio.Identity.Sim) + aliases.sorted().map { com.victorious.sms.twilio.Identity.Alias(it) }).forEach { o ->
+            TextButton(onClick = { defaultId = o; creds.defaultIdentity = o }) {
+                Text((if (o == defaultId) "● " else "○ ") + com.victorious.sms.twilio.IdentityResolver.label(o), color = onBg)
+            }
+        }
+        Text("Each SMS thread can override this (Sending as → Change).", color = onBg, fontSize = 12.sp)
+
+        Text("Masked calls", color = Cyan, fontWeight = FontWeight.SemiBold)
+        OutlinedTextField(myPhone, { myPhone = it }, label = { Text("Your real phone (+1…), rung first") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        Button(onClick = { creds.myPhone = myPhone; info = "Saved." }) { Text("Save phone") }
+        Text("A masked call rings your phone from Twilio, then connects the other person showing your alias. Billed per minute for both legs.", color = onBg, fontSize = 12.sp)
 
         Text("Send a text from your alias", color = Cyan, fontWeight = FontWeight.SemiBold)
-        Text(if (alias.isBlank()) "Pick an alias number first." else "From $alias", color = onBg, fontSize = 12.sp)
+        if (aliases.isEmpty()) Text("Pick an alias number first.", color = onBg, fontSize = 12.sp)
+        aliases.sorted().forEach { a -> TextButton(onClick = { alias = a }) { Text((if (a == alias) "● From " else "○ From ") + a, color = onBg, fontSize = 12.sp) } }
         OutlinedTextField(to, { to = it }, label = { Text("To") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(body, { body = it }, label = { Text("Message") }, modifier = Modifier.fillMaxWidth())
         Button(enabled = creds.isSet() && alias.isNotBlank() && to.isNotBlank() && body.isNotBlank(), onClick = {
-            val (t, b) = to to body
-            run("Sending") { client.sendSms(alias, t, b); body = ""; "Sent via Twilio (standard Twilio messaging charges apply)." }
+            val (t, b) = to to body; val a = alias
+            scope.launch { confirmSend = Triple(a, t, withContext(Dispatchers.IO) { client.smsPrice("US") }) }
+            pendingBody = b
         }) { Text("Send from alias") }
 
         Text("SIP (for calls from your alias)", color = Cyan, fontWeight = FontWeight.SemiBold)
@@ -106,8 +131,8 @@ fun TwilioScreen(onBack: () -> Unit) {
             run("Creating") { val r = client.createSipDomainWithCredentials(d, u, p); sipPass = ""; domains = client.listSipDomains(); "Created ${r.domainName}." }
         }) { Text("Create SIP domain + credentials") }
         Text(
-            if (SipCalling.platformSipSupported(ctx)) "This phone reports built-in SIP support, but SIP calling in VictorSMS is not built yet."
-            else "SIP calling is not built yet (no licence-compatible SIP stack chosen). Texts work now.",
+            if (SipCalling.platformSipSupported(ctx)) "This phone reports built-in SIP support, but SIP calling in VictorSMS is not built yet. Use Masked call (Twilio bridge) instead."
+            else "SIP calling is not built yet (no licence-compatible SIP stack chosen). Masked calls use the Twilio bridge instead.",
             color = Magenta, fontSize = 12.sp,
         )
 
@@ -139,6 +164,21 @@ fun TwilioScreen(onBack: () -> Unit) {
                 }) { Text("Buy", color = Magenta) }
             },
             dismissButton = { TextButton(onClick = { buying = null }) { Text("Cancel") } },
+        )
+    }
+
+    confirmSend?.let { (a, t, price) ->
+        AlertDialog(
+            onDismissRequest = { confirmSend = null },
+            title = { Text("Send from alias …${a.takeLast(4)}?") },
+            text = { Text("Charged to your Twilio account: " + (price ?: "price could not be loaded (see twilio.com/pricing)") + ". Nothing is sent unless you tap Send.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmSend = null; val b = pendingBody
+                    run("Sending") { client.sendMessage(a, t, b); body = ""; "Sent via Twilio." }
+                }) { Text("Send", color = Magenta) }
+            },
+            dismissButton = { TextButton(onClick = { confirmSend = null }) { Text("Cancel") } },
         )
     }
 }

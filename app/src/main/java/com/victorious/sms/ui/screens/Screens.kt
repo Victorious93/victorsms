@@ -160,6 +160,23 @@ fun RoomListScreen(
             kotlinx.coroutines.delay(5000)
         }
     }
+    // Alias inbox: texts sent TO Don's Twilio alias numbers, polled from Twilio every 60 s.
+    val twilio = remember { com.victorious.sms.twilio.TwilioCredentials(ctx) }
+    var aliasThreads by remember { mutableStateOf(emptyList<com.victorious.sms.twilio.AliasMessage>()) }
+    var filter by remember { mutableStateOf("all") }
+    LaunchedEffect(Unit) {
+        while (true) {
+            if (twilio.isSet() && twilio.aliases.isNotEmpty()) {
+                aliasThreads = withContext(Dispatchers.IO) {
+                    runCatching {
+                        val c = com.victorious.sms.twilio.TwilioClient(twilio)
+                        twilio.aliases.flatMap { c.aliasMessages(it) }.distinctBy { it.alias + "|" + it.peer }
+                    }.getOrDefault(aliasThreads)
+                }
+            } else aliasThreads = emptyList()
+            kotlinx.coroutines.delay(60_000)
+        }
+    }
     val permLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         smsReady = smsRepo.isDefaultSmsApp() && smsRepo.canRead()
     }
@@ -167,10 +184,16 @@ fun RoomListScreen(
         permLauncher.launch(SMS_PERMISSIONS)
     }
     // Unified inbox: SMS threads (newest first) then Matrix rooms from ALL accounts.
-    val entries: List<InboxEntry> = listOf(
+    val bots = listOf(
         InboxEntry.Bot("summarizer", "Summarizer / triage", "Ask your PC LLM to summarize or triage"),
         InboxEntry.Bot("fleet", "Fleet (droidcommand-AI)", "Send a command to droidcommand-AI"),
-    ) + smsThreads.map { InboxEntry.Sms(it) } + roomsByAccount.values.flatten().map { InboxEntry.Matrix(it) }
+    )
+    val aliasEntries = aliasThreads.map { InboxEntry.Alias(it) }
+    val entries: List<InboxEntry> = when (filter) {
+        "sim" -> smsThreads.map { InboxEntry.Sms(it) }
+        "alias" -> aliasEntries
+        else -> bots + (smsThreads.map { InboxEntry.Sms(it) } + aliasEntries).sortedByDescending { it.dateMs } + roomsByAccount.values.flatten().map { InboxEntry.Matrix(it) }
+    }
     val scope = rememberCoroutineScope()
     var menu by remember { mutableStateOf(false) }
     Page("Inbox", actions = {
@@ -206,6 +229,13 @@ fun RoomListScreen(
                 }) { Text("Set up", color = Cyan) }
             }
         }
+        if (aliasThreads.isNotEmpty() || twilio.aliases.isNotEmpty()) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+                listOf("all" to "All", "sim" to "SIM", "alias" to "Alias").forEach { (k, l) ->
+                    TextButton(onClick = { filter = k }) { Text(if (filter == k) "[$l]" else l, color = if (filter == k) Magenta else Cyan) }
+                }
+            }
+        }
         if (entries.isEmpty()) {
             Text("No conversations yet.", color = MaterialTheme.colorScheme.onBackground, modifier = Modifier.padding(24.dp))
         }
@@ -217,6 +247,7 @@ fun RoomListScreen(
                             is InboxEntry.Sms -> onOpenSms(e.t.threadId, e.t.address)
                             is InboxEntry.Matrix -> onOpen(e.r.accountId, e.r.id)
                             is InboxEntry.Bot -> onOpenBot(e.kind)
+                            is InboxEntry.Alias -> onOpenSms(-1L, e.m.peer)
                         }
                     }.padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -227,7 +258,7 @@ fun RoomListScreen(
                     }
                     Text(
                         e.badge, color = Charcoal, fontSize = 11.sp, fontWeight = FontWeight.Bold,
-                        modifier = Modifier.background(if (e.source == MessageSource.SMS) Cyan else Magenta, RoundedCornerShape(8.dp))
+                        modifier = Modifier.background(if (e is InboxEntry.Alias) Magenta else if (e.source == MessageSource.SMS) Cyan else Magenta, RoundedCornerShape(8.dp))
                             .padding(horizontal = 8.dp, vertical = 2.dp),
                     )
                 }
@@ -301,12 +332,22 @@ val SMS_PERMISSIONS = buildList {
 }.toTypedArray()
 
 sealed class InboxEntry {
-    abstract val key: String; abstract val title: String; abstract val subtitle: String; abstract val source: MessageSource; open val badge: String get() = source.label
+    abstract val key: String; abstract val title: String; abstract val subtitle: String; abstract val source: MessageSource; open val badge: String get() = source.label; open val dateMs: Long get() = 0L
     data class Sms(val t: SmsThread) : InboxEntry() {
         override val key get() = "sms:${t.threadId}"
         override val title get() = t.address
         override val subtitle get() = t.snippet
         override val source get() = MessageSource.SMS
+        override val dateMs get() = t.dateMs
+    }
+    /** Latest text with someone on one of Don's Twilio alias numbers. */
+    data class Alias(val m: com.victorious.sms.twilio.AliasMessage) : InboxEntry() {
+        override val key get() = "alias:${m.alias}:${m.peer}"
+        override val title get() = m.peer
+        override val subtitle get() = m.body
+        override val source get() = MessageSource.SMS
+        override val badge get() = "Alias …" + m.alias.takeLast(4)
+        override val dateMs get() = m.dateMs
     }
     data class Matrix(val r: RoomSummary) : InboxEntry() {
         override val key get() = "mx:${r.accountId}:${r.id}"

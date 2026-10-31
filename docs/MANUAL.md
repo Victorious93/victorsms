@@ -141,18 +141,36 @@ Use a second phone's SIM from this phone, over the Victorious Mesh.
    Settings → **Caller lookup**. Online lookup is off and no provider is set up.
    `[screenshot: keypad]` `[screenshot: in-call]`
 
-### Twilio alias number (texts built; calls planned; not device-tested)
-A second number you own in **your** Twilio account. It is not spoofing: people see your real
-Twilio number.
+### Second number: mask your real number (built; not device-tested; Twilio not tested live)
+Use a real second number that **you own in your own Twilio account** so people see that number
+instead of your SIM number. This is **not** caller-ID or SMS spoofing: the app refuses any
+"from" number that is not in the list fetched from your Twilio account.
 1. In the Twilio console, create an API key. In VictorSMS: Settings → **Twilio alias number**.
    Enter the Account SID, API key SID and secret, then tap **Save** (stored encrypted).
-2. Tap **Load my numbers** and choose **Use as alias**.
-3. Send a text from the alias on this screen, or tick **Send from alias** in any SMS thread.
-   Twilio charges apply.
-4. **Get a new number:** search (optionally by area code), tap **Buy…**. A dialog shows the
-   monthly cost; nothing is bought unless you tap **Buy** in that dialog.
-5. **SIP:** **Create SIP domain + credentials** sets up `<name>.sip.twilio.com` for future calling.
-   Calling from the alias is **not built yet**.
+2. Tap **Load my numbers** and tap **Use as alias** on one or more numbers (several allowed).
+3. **Default identity:** choose SIM or one of your aliases. New threads use it.
+4. **In any SMS thread** the composer shows **Sending as: SIM** or **Sending as: Alias …1234**.
+   Tap **Change** to set the identity for that thread only (or go back to the default).
+5. **Alias texts / MMS:** with an alias selected, tap Send. A dialog shows the Twilio price first;
+   nothing is sent until you tap **Confirm**. For MMS, paste a public `https://` image URL
+   (Twilio fetches media from a URL; US/Canada only).
+6. **Masked call:** enter your real phone under **Masked calls** and tap **Save phone**. In a thread
+   using an alias, tap **Masked call** → confirm the per-minute price. Twilio rings **your**
+   phone; answer and it connects the other person, who sees your alias number.
+7. **Inbox:** texts to your alias numbers appear in the inbox with an **Alias …1234** badge
+   (checked every 60 s). Use the **All / SIM / Alias** filter at the top.
+8. **Get a new number:** search, tap **Buy…**. A dialog shows the monthly cost; nothing is bought
+   unless you tap **Buy**. Nothing is ever bought automatically.
+9. **SIP:** **Create SIP domain + credentials** prepares `<name>.sip.twilio.com`; SIP calling in
+   the app is still not built (masked calls use the bridge instead).
+
+**US texting rules (A2P 10DLC):** US carriers require texts sent from a Twilio 10-digit local
+number to be registered (Brand + Campaign in the Twilio console, Messaging → Regulatory
+Compliance). Unregistered traffic is filtered or blocked and may incur carrier fees. For personal
+use, register a Sole Proprietor brand, or use a verified toll-free number instead. Honour STOP/HELP
+(Twilio handles STOP opt-outs by default), text only people who expect to hear from you, and
+follow local call-recording and consent laws. Costs (numbers, texts, MMS, call minutes on both
+legs, registration fees) are billed by Twilio to your account.
    `[screenshot: twilio]`
 
 ### Draft replies in your style + voice notes (built, not device-tested)
@@ -270,7 +288,8 @@ You can deny any optional permission; the related feature simply stays off.
   only**, and only when you tap it. Voice notes send only the draft text and the voice id.
 
 - Twilio credentials (if you add them) are stored encrypted on the phone and used only to talk to
-  Twilio over HTTPS. Alias texts go through Twilio's servers.
+  Twilio over HTTPS. Alias texts and masked calls go through Twilio's servers. The app never
+  logs phone numbers, message bodies or tokens.
 
 - Matrix sessions are stored per account, encrypted with a key in the Android Keystore. Tokens
   are never written to logs.

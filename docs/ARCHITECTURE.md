@@ -336,7 +336,7 @@ notifications, `SmsManager`) is not covered and is still not device-tested.
   - **buy:** `POST /IncomingPhoneNumbers.json`, called only from the explicit cost-confirmation
     dialog. Never automatic;
   - **alias SMS:** `POST /Messages.json` (`From` = chosen alias). User-initiated only (Twilio
-    screen or the "Send from alias" checkbox in an SMS thread).
+    screen or the identity picker in an SMS thread, see 19a).
 - **SIP calling: stub (`SipCalling`).** `android.net.sip` is still in SDK 37 but deprecated since
   API 31 and unsupported on most devices, so it is not used. Linphone and PJSIP are GPL and must
   not be linked into this Apache-2.0 app. Options for Don to choose:
@@ -344,6 +344,39 @@ notifications, `SmsManager`) is not covered and is still not device-tested.
   2. **Twilio Voice Android SDK** (proprietary Twilio licence, uses Twilio Voice instead of plain SIP);
   3. a SIP softphone on the PC over the mesh.
 - Costs: alias texts, SIP minutes and numbers are billed by Twilio to Don's account.
+
+### 19a. Second number / identity picker (implemented; unit-tested; not device-tested; Twilio not tested live)
+
+- **No spoofing, ever.** Every alias send or call first calls `TwilioClient.requireOwned(from)`,
+  which fetches `GET /IncomingPhoneNumbers.json` and runs `FromNumberGuard.check` (pure Kotlin):
+  the from-number must be valid E.164 and in that freshly fetched owned list, else
+  `NotOwnedNumberException`. Unit tests: `FromNumberGuardTest`.
+- **Identity model** (`twilio/Identity.kt`): `Identity.Sim | Identity.Alias(number)`, stored as
+  `sim` / `alias:+1…`. `IdentityResolver.resolve(threadChoice, default, aliases)`: thread override
+  → default → SIM; an alias no longer configured falls back (never sends from an unknown number).
+  Tests: `IdentityTest`.
+- **Storage:** `TwilioCredentials` (EncryptedSharedPreferences `twilio_credentials`) now holds
+  `aliases` (set; the old single `alias` key is migrated), `myPhone`, `identity.default` and
+  `identity.thread.<normalized address>`.
+- **Outbound SMS/MMS:** `sendMessage(from, to, body, mediaUrl?)` → `POST /Messages.json`
+  (`MediaUrl` only for public https URLs). The composer shows the identity in use and requires a
+  confirmation dialog with the price from Pricing `GET /v1/Messaging/Countries/US`.
+- **Masked call (no-SIP fallback):** `bridgeCall(alias, myPhone, callee)` → `POST /Calls.json`
+  with `From`=alias, `To`=Don's phone, inline `Twiml` =
+  `<Dial callerId="alias"><Number>callee</Number></Dial>` (XML-escaped). Caller ID is an owned
+  Twilio number, which Twilio permits. Confirmation dialog shows Pricing
+  `GET /v2/Voice/Numbers/{callee}` per-minute price; two legs are billed.
+- **Inbound:** polling (no webhook server): inbox every 60 s `GET /Messages.json?To=alias`, grouped
+  by (alias, peer) as `InboxEntry.Alias` with an "Alias …1234" badge and an All/SIM/Alias filter.
+  A thread fetches both directions for that peer every 30 s and merges them into the SIM thread.
+  Only the last 50 messages per query; MMS media is shown as a count only.
+- **Logging:** no `Log`/`println` in Twilio code; UI shows only Twilio's error message and the last
+  4 digits of an alias.
+- **Compliance:** US A2P 10DLC registration (Brand + Campaign, or Sole Proprietor) is required
+  for 10DLC texting; toll-free needs verification. STOP/HELP handled by Twilio Advanced Opt-Out by
+  default. The app does not register anything or buy anything automatically.
+- **Not done / limits:** no push for inbound (polling only), no local MMS attachment upload
+  (needs a public URL), message history is not written to the Telephony provider, no SIP.
 
 ## 20. Persona drafter + voice notes (implemented, not device-tested; PC side not included)
 

@@ -22,6 +22,20 @@ class TwilioCredentials(context: Context) {
     var apiKeySecret: String get() = p.getString("apiKeySecret", "").orEmpty(); set(v) = p.edit().putString("apiKeySecret", v).apply()
     /** The chosen alias number (one of Don's Twilio numbers, E.164). */
     var aliasNumber: String get() = p.getString("alias", "").orEmpty(); set(v) = p.edit().putString("alias", v).apply()
+    /** All alias numbers Don picked (multiple allowed). Migrates the old single alias. */
+    var aliases: Set<String>
+        get() = (p.getStringSet("aliases", null) ?: emptySet()) + listOfNotNull(aliasNumber.takeIf { it.isNotBlank() })
+        set(v) { p.edit().putStringSet("aliases", v).putString("alias", "").apply() }
+    /** Don's real phone, rung first for masked bridge calls (E.164). */
+    var myPhone: String get() = p.getString("myPhone", "").orEmpty(); set(v) = p.edit().putString("myPhone", v.trim()).apply()
+    var defaultIdentity: Identity
+        get() = Identity.decode(p.getString("identity.default", null)) ?: Identity.Sim
+        set(v) = p.edit().putString("identity.default", v.encode()).apply()
+    private fun threadKey(address: String) = "identity.thread." + PhoneNumbers.normalize(address)
+    fun threadIdentity(address: String): Identity? = Identity.decode(p.getString(threadKey(address), null))
+    fun setThreadIdentity(address: String, i: Identity?) =
+        p.edit().apply { if (i == null) remove(threadKey(address)) else putString(threadKey(address), i.encode()) }.apply()
+    fun resolve(address: String): Identity = IdentityResolver.resolve(threadIdentity(address), defaultIdentity, aliases)
     fun isSet() = accountSid.startsWith("AC") && apiKeySid.isNotBlank() && apiKeySecret.isNotBlank()
     fun clear() = p.edit().clear().apply()
 }
@@ -101,7 +115,69 @@ class TwilioClient(private val creds: TwilioCredentials) {
         return TwilioNumber(j.optString("sid"), j.optString("phone_number"), j.optString("friendly_name"))
     }
 
-    /** Sends a text from Don's alias number via the Messaging API. User-initiated only. Returns the message SID. */
-    fun sendSms(from: String, to: String, body: String): String =
-        call("POST", "$base/Messages.json", mapOf("From" to from, "To" to to, "Body" to body)).optString("sid")
+    /** Fetches Don's owned numbers from Twilio and rejects [from] unless it is one of them. */
+    fun requireOwned(from: String): String =
+        FromNumberGuard.check(from, listNumbers().map { it.phoneNumber }).getOrThrow()
+
+    /**
+     * Sends SMS (or MMS when [mediaUrl] is a public https URL) from Don's alias via the Messaging API.
+     * User-initiated only, after the price dialog. The from-number is checked against the owned list.
+     */
+    fun sendMessage(from: String, to: String, body: String, mediaUrl: String? = null): String {
+        val owned = requireOwned(from)
+        val form = mutableMapOf("From" to owned, "To" to to, "Body" to body)
+        if (!mediaUrl.isNullOrBlank()) {
+            require(mediaUrl.startsWith("https://")) { "MMS media must be a public https URL." }
+            form["MediaUrl"] = mediaUrl
+        }
+        return call("POST", "$base/Messages.json", form).optString("sid")
+    }
+
+    /**
+     * Masked bridge call (no-SIP fallback): Twilio rings [myPhone] from the alias; when Don answers,
+     * TwiML dials [callee] with callerId = alias (a Twilio number Don owns). Returns the call SID.
+     */
+    fun bridgeCall(alias: String, myPhone: String, callee: String): String {
+        val owned = requireOwned(alias)
+        require(PhoneNumbers.isE164(myPhone) && PhoneNumbers.isE164(callee)) { "Numbers must be in +E.164 format." }
+        return call("POST", "$base/Calls.json", mapOf("From" to owned, "To" to myPhone, "Twiml" to TwiML.bridge(owned, callee))).optString("sid")
+    }
+
+    /** Outbound SMS price for [country] (first listed carrier), e.g. "0.0083 USD". Null if unavailable. */
+    fun smsPrice(country: String = "US"): String? = runCatching {
+        val j = call("GET", "https://pricing.twilio.com/v1/Messaging/Countries/$country")
+        val c = j.optJSONArray("outbound_sms_prices")?.optJSONObject(0) ?: return null
+        val p = c.optJSONArray("prices")?.optJSONObject(0) ?: return null
+        p.optString("current_price") + " " + j.optString("price_unit") + " per segment"
+    }.getOrNull()
+
+    /** Outbound voice price per minute to [number] (Voice Pricing v2). Null if unavailable. */
+    fun voicePricePerMinute(number: String): String? = runCatching {
+        val j = call("GET", "https://pricing.twilio.com/v2/Voice/Numbers/" + URLEncoder.encode(number, "UTF-8"))
+        val p = j.optJSONArray("outbound_call_prices")?.optJSONObject(0) ?: return null
+        p.optString("current_price") + " " + j.optString("price_unit") + "/min"
+    }.getOrNull()
+
+    /** Recent messages to or from [alias] (both directions), newest first. Optionally only with [peer]. */
+    fun aliasMessages(alias: String, peer: String? = null, pageSize: Int = 50): List<AliasMessage> {
+        fun q(k1: String, v1: String, k2: String?, v2: String?) = "$base/Messages.json?PageSize=$pageSize&" +
+            "$k1=" + URLEncoder.encode(v1, "UTF-8") + (if (k2 != null && v2 != null) "&$k2=" + URLEncoder.encode(v2, "UTF-8") else "")
+        val inbound = call("GET", q("To", alias, "From", peer)).optJSONArray("messages")
+        val outbound = if (peer != null) call("GET", q("From", alias, "To", peer)).optJSONArray("messages") else null
+        return listOfNotNull(inbound, outbound).flatMap { a -> (0 until a.length()).map { a.getJSONObject(it) } }
+            .map { AliasMessage.fromJson(alias, it) }
+            .distinctBy { it.sid }.sortedByDescending { it.dateMs }
+    }
+}
+
+data class AliasMessage(val sid: String, val alias: String, val peer: String, val body: String, val dateMs: Long, val outgoing: Boolean, val numMedia: Int) {
+    companion object {
+        private val fmt get() = java.text.SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss Z", java.util.Locale.US)
+        fun fromJson(alias: String, j: JSONObject): AliasMessage {
+            val outgoing = j.optString("direction").startsWith("outbound")
+            val date = j.optString("date_sent").ifBlank { j.optString("date_created") }
+            return AliasMessage(j.optString("sid"), alias, if (outgoing) j.optString("to") else j.optString("from"),
+                j.optString("body"), runCatching { fmt.parse(date)!!.time }.getOrDefault(0L), outgoing, j.optString("num_media").toIntOrNull() ?: 0)
+        }
+    }
 }
