@@ -90,4 +90,7 @@ dependencies {
     implementation(libs.androidx.security.crypto)
     implementation(libs.kotlinx.coroutines.android)
     debugImplementation(libs.androidx.compose.ui.tooling)
+    testImplementation("junit:junit:4.13.2")
+    // Real org.json on the JVM (android.jar stubs throw in local unit tests).
+    testImplementation("org.json:json:20250517")
 }

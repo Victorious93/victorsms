@@ -34,6 +34,14 @@
                 <action android:name="com.victorious.sms.action.BRIDGE" />
             </intent-filter>
         </service>
+        <!-- VictorLaunch fleet theme wake-up (explicit send to this package). Extras untrusted; we re-query the pinned provider. -->
+        <receiver
+            android:name=".ui.theme.FleetThemeChangedReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.victorious.launch.action.FLEET_THEME_CHANGED" />
+            </intent-filter>
+        </receiver>
         <receiver
             android:name=".sms.SmsDeliverReceiver"
             android:exported="true"

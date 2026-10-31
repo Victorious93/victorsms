@@ -384,6 +384,33 @@ place a call through its SIM, or receive a mirror of the other's incoming texts.
   `ForbiddenKeyScanner` (export/import refuse). They are not part of `config.export`.
 - Live DCA inbound for `sms.remote_command.forward` may still be pending on the DCA side; a
   refused connection is reported without leaking secrets.
+## 23. Fleet theme client (implemented, not device-tested)
+
+Contract: VictorLaunch `docs/specs/FLEET_THEME.md`, **schemaVersion 1**. Code:
+`ui/theme/FleetThemeClient.kt` (`FleetThemeCodec`, `FleetThemeClient`, `FleetThemeChangedReceiver`)
+and `ui/theme/Theme.kt`.
+
+- **Read path:** `VictorSMSTheme` calls `FleetThemeClient.start()` (idempotent) which queries
+  `content://com.victorious.launch.theme/current` on a background executor and registers a
+  `ContentObserver` on that URI. An exported receiver for
+  `com.victorious.launch.action.FLEET_THEME_CHANGED` triggers the same re-query. Broadcast extras
+  are a wake-up only and are never trusted.
+- **Provider pinning:** before querying, the authority must resolve to package
+  `com.victorious.launch` and that package's signing-cert SHA-256 must be in `PINNED_CERTS`
+  (spec "current" debug cert) and not in `REVOKED_CERTS`. "next" and "release" are unpublished, so
+  nothing else authorizes. Multi-signer packages are refused.
+- **Parsing:** `json` column; `schemaVersion` column and JSON must both equal 1, otherwise rejected.
+  Palette is applied **per key**: an absent/blank/invalid hex keeps the neon default for its roles.
+  Unknown fields are ignored.
+- **Mapping (matches VictorLaunch):** background → background, onPrimary, onSecondary, onError;
+  surface → surface; primary → primary; secondary → secondary; onBackground → onBackground,
+  onSurface; muted → onSurfaceVariant, outline; danger → error; tile → surfaceVariant; stale is
+  parsed but not mapped to an M3 role.
+- **Failure:** `SecurityException` (our package/cert not pinned by VictorLaunch) or any other
+  error publishes `FleetPalette.NONE` → built-in neon scheme.
+- **Never writes:** no insert/update/delete calls exist.
+- **Tests:** `app/src/test/.../FleetThemeCodecTest.kt` covers hex parsing, schema rejection, per-key
+  fallback, and cert pin/revocation logic. Provider/receiver behaviour is not device-tested.
 
 ## Milestones
 

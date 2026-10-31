@@ -217,6 +217,15 @@ You can deny any optional permission; the related feature simply stays off.
 - **Status (planned):** droidcommand-AI can ask VictorSMS for its status (`node.status.get`). The
   answer says whether SMS is ready to deliver and whether the app is healthy. It never contains
   message bodies, phone numbers, your code word or your whitelist.
+- **Fleet theme (built, not device-tested):** VictorSMS follows the colours you pick in
+  VictorLaunch → Settings → **Fleet theme**. It reads them when the app starts and again whenever
+  VictorLaunch changes them, so the app recolours live. VictorSMS only **reads** the theme; it never
+  changes it. It only trusts the theme if it really comes from VictorLaunch (`com.victorious.launch`
+  signed with its published key). If VictorLaunch is missing, not trusted, or says no, VictorSMS
+  keeps its built-in neon theme. A colour VictorLaunch leaves out or sends broken keeps the neon
+  default for that one colour.
+  - **Note:** VictorLaunch only answers apps it has pinned. VictorSMS (`com.victorious.sms`) is not
+    on its theme-consumer list yet, so until it is added there you will see the neon theme.
 
 ## Troubleshooting/FAQ
 
