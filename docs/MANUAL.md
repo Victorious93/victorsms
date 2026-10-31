@@ -161,8 +161,32 @@ instead of your SIM number. This is **not** caller-ID or SMS spoofing: the app r
    (checked every 60 s). Use the **All / SIM / Alias** filter at the top.
 8. **Get a new number:** search, tap **Buy…**. A dialog shows the monthly cost; nothing is bought
    unless you tap **Buy**. Nothing is ever bought automatically.
-9. **SIP:** **Create SIP domain + credentials** prepares `<name>.sip.twilio.com`; SIP calling in
-   the app is still not built (masked calls use the bridge instead).
+9. **SIP domain (optional):** **Create SIP domain + credentials…** prepares `<name>.sip.twilio.com`
+   for a desk phone or softphone. A dialog explains the per-minute/registration billing first;
+   nothing is created unless you tap **Create**. VictorSMS itself calls over Twilio Voice (below).
+
+### Alias calls over Twilio Voice (built; not device-tested; Twilio not tested live)
+
+Real VoIP calls from the app with your alias as caller ID. Calls show in the normal in-call
+screen (answer, end, mute, speaker, hold, keypad).
+
+1. **On your PC**, run the voice shim (`pc/voice_shim.py`, Python 3, no extra packages). Set
+   `TWILIO_ACCOUNT_SID`, `TWILIO_API_KEY_SID`, `TWILIO_API_KEY_SECRET`, `TWILIO_AUTH_TOKEN` and
+   `SHIM_PUBLIC_URL` in its environment (never in a file in the repo) and put an **https** tunnel
+   or reverse proxy in front of `127.0.0.1:8787`. See `pc/README.md`.
+2. In **Twilio alias number → Alias calls**, enter the shim URL and tap **Create TwiML App…**.
+   The dialog says it has no monthly fee (calls are per minute); nothing is created until you
+   tap **Create**. The SID (AP…) is filled in. Tap **Save** and allow the microphone.
+3. **Outgoing:** enter a number, tap **Call from alias…**. The dialog shows the per-minute price;
+   tap **Call**. The app fetches your numbers from Twilio right then and refuses any caller ID that
+   is not one of them; the PC shim checks again. If Android asks, enable
+   **VictorSMS alias (Twilio)** under Settings → Calling accounts.
+4. **Incoming (optional):** needs your own Firebase project (free tier) and a Twilio **Push
+   Credential** (Console → Voice → Credentials, type FCM) – both created by you in their consoles;
+   the app never creates them. Enter the Push Credential SID (CR…) and the Firebase project ID,
+   app ID, API key and sender ID, tap **Save**, then **Enable incoming**. Then tap **Route incoming
+   calls on +1… to this app…** for each alias (a dialog warns it replaces that number's current
+   Voice URL). Calls to the alias then ring in VictorSMS.
 
 **US texting rules (A2P 10DLC):** US carriers require texts sent from a Twilio 10-digit local
 number to be registered (Brand + Campaign in the Twilio console, Messaging → Regulatory

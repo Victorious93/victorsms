@@ -22,7 +22,9 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.victorious.sms.twilio.AvailableNumber
-import com.victorious.sms.twilio.SipCalling
+import com.victorious.sms.twilio.VoiceCalling
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import com.victorious.sms.twilio.SipDomain
 import com.victorious.sms.twilio.TwilioClient
 import com.victorious.sms.twilio.TwilioCredentials
@@ -60,6 +62,19 @@ fun TwilioScreen(onBack: () -> Unit) {
     var to by remember { mutableStateOf("") }
     var body by remember { mutableStateOf("") }
     var pendingBody by remember { mutableStateOf("") }
+    var confirmSip by remember { mutableStateOf<Triple<String, String, String>?>(null) }
+    var shimUrl by remember { mutableStateOf("") }
+    var appSid by remember { mutableStateOf(creds.twimlAppSid) }
+    var pushSid by remember { mutableStateOf(creds.pushCredentialSid) }
+    var fcmProject by remember { mutableStateOf(creds.fcmProjectId) }
+    var fcmApp by remember { mutableStateOf(creds.fcmAppId) }
+    var fcmKey by remember { mutableStateOf(creds.fcmApiKey) }
+    var fcmSender by remember { mutableStateOf(creds.fcmSenderId) }
+    var confirmApp by remember { mutableStateOf(false) }
+    var confirmRoute by remember { mutableStateOf<String?>(null) }
+    var callTo by remember { mutableStateOf("") }
+    var confirmCall by remember { mutableStateOf<Triple<String, String, String?>?>(null) }
+    val micLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok -> if (!ok) info = "Microphone denied: alias calls need it." }
 
     fun run(label: String, block: suspend () -> String) = scope.launch {
         info = "$label…"
@@ -127,14 +142,38 @@ fun TwilioScreen(onBack: () -> Unit) {
         OutlinedTextField(sipPass, { sipPass = it }, label = { Text("SIP password (Twilio: 12+ chars, mixed case, a digit)") }, singleLine = true,
             visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
         Button(enabled = creds.isSet() && domPrefix.isNotBlank() && sipUser.isNotBlank() && sipPass.length >= 12, onClick = {
-            val (d, u, p) = Triple(domPrefix, sipUser, sipPass)
-            run("Creating") { val r = client.createSipDomainWithCredentials(d, u, p); sipPass = ""; domains = client.listSipDomains(); "Created ${r.domainName}." }
-        }) { Text("Create SIP domain + credentials") }
-        Text(
-            if (SipCalling.platformSipSupported(ctx)) "This phone reports built-in SIP support, but SIP calling in VictorSMS is not built yet. Use Masked call (Twilio bridge) instead."
-            else "SIP calling is not built yet (no licence-compatible SIP stack chosen). Masked calls use the Twilio bridge instead.",
-            color = Magenta, fontSize = 12.sp,
-        )
+            confirmSip = Triple(domPrefix, sipUser, sipPass)
+        }) { Text("Create SIP domain + credentials…") }
+        Text("Optional: a SIP domain lets a desk phone or softphone register to your Twilio account. VictorSMS itself calls over the Twilio Voice SDK below.", color = onBg, fontSize = 12.sp)
+
+        Text("Alias calls (Twilio Voice)", color = Cyan, fontWeight = FontWeight.SemiBold)
+        Text("Real VoIP calls from this phone showing your alias. Needs pc/voice_shim.py reachable over https (see Help).", color = onBg, fontSize = 12.sp)
+        OutlinedTextField(shimUrl, { shimUrl = it.trim() }, label = { Text("Voice shim base URL (https://…)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        Button(enabled = creds.isSet() && shimUrl.startsWith("https://"), onClick = { confirmApp = true }) { Text("Create TwiML App…") }
+        OutlinedTextField(appSid, { appSid = it }, label = { Text("TwiML App SID (AP…)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        aliases.sorted().forEach { a ->
+            TextButton(enabled = shimUrl.startsWith("https://"), onClick = { confirmRoute = a }) { Text("Route incoming calls on $a to this app…", color = Cyan, fontSize = 12.sp) }
+        }
+        OutlinedTextField(pushSid, { pushSid = it }, label = { Text("Push Credential SID (CR…, incoming calls)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(fcmProject, { fcmProject = it }, label = { Text("Firebase project ID") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(fcmApp, { fcmApp = it }, label = { Text("Firebase app ID (1:…:android:…)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(fcmKey, { fcmKey = it }, label = { Text("Firebase API key") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(fcmSender, { fcmSender = it }, label = { Text("Firebase sender ID") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = {
+                creds.twimlAppSid = appSid; creds.pushCredentialSid = pushSid
+                creds.fcmProjectId = fcmProject; creds.fcmAppId = fcmApp; creds.fcmApiKey = fcmKey; creds.fcmSenderId = fcmSender
+                if (!VoiceCalling.micGranted(ctx)) micLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+                info = "Saved."
+            }) { Text("Save") }
+            Button(enabled = creds.isSet(), onClick = { info = "Registering…"; VoiceCalling.registerIncoming(ctx) { m -> info = m } }) { Text("Enable incoming") }
+        }
+        Text("After the first call, allow \"VictorSMS alias (Twilio)\" under Settings → Calling accounts if Android asks.", color = onBg, fontSize = 12.sp)
+        OutlinedTextField(callTo, { callTo = it }, label = { Text("Call (+E.164)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        Button(enabled = creds.isSet() && alias.isNotBlank() && callTo.isNotBlank() && creds.twimlAppSid.startsWith("AP"), onClick = {
+            val (a, t) = alias to callTo
+            scope.launch { confirmCall = Triple(a, t, withContext(Dispatchers.IO) { client.voicePricePerMinute(t) }) }
+        }) { Text("Call from alias…") }
 
         Text("Get a new number", color = Cyan, fontWeight = FontWeight.SemiBold)
         OutlinedTextField(area, { area = it.filter(Char::isDigit).take(3) }, label = { Text("US area code (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -179,6 +218,66 @@ fun TwilioScreen(onBack: () -> Unit) {
                 }) { Text("Send", color = Magenta) }
             },
             dismissButton = { TextButton(onClick = { confirmSend = null }) { Text("Cancel") } },
+        )
+    }
+
+    confirmSip?.let { (d, u, pw) ->
+        AlertDialog(
+            onDismissRequest = { confirmSip = null },
+            title = { Text("Create $d.sip.twilio.com?") },
+            text = { Text("The domain and credential list have no setup fee, but SIP registrations and every SIP call minute are billed to your Twilio account (Twilio does not expose this price over the API; see twilio.com/en-us/voice/pricing). Nothing is created unless you tap Create.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmSip = null
+                    run("Creating") { val r = client.createSipDomainWithCredentials(d, u, pw); sipPass = ""; domains = client.listSipDomains(); "Created ${r.domainName}." }
+                }) { Text("Create", color = Magenta) }
+            },
+            dismissButton = { TextButton(onClick = { confirmSip = null }) { Text("Cancel") } },
+        )
+    }
+
+    if (confirmApp) {
+        AlertDialog(
+            onDismissRequest = { confirmApp = false },
+            title = { Text("Create a TwiML App?") },
+            text = { Text("A TwiML App has no monthly fee. Calls made through it are billed per minute (shown before each call). Voice URL: ${shimUrl.trimEnd('/')}/voice. Nothing is created unless you tap Create.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmApp = false; val u = shimUrl.trimEnd('/') + "/voice"
+                    run("Creating") { val sid = client.createTwimlApp(u); creds.twimlAppSid = sid; appSid = sid; "TwiML App $sid created." }
+                }) { Text("Create", color = Magenta) }
+            },
+            dismissButton = { TextButton(onClick = { confirmApp = false }) { Text("Cancel") } },
+        )
+    }
+
+    confirmRoute?.let { a ->
+        AlertDialog(
+            onDismissRequest = { confirmRoute = null },
+            title = { Text("Route incoming calls on $a?") },
+            text = { Text("Changes this number's Voice URL to ${shimUrl.trimEnd('/')}/incoming, replacing whatever it does now. No setup fee; incoming minutes and the app leg are billed per minute by Twilio (see twilio.com/en-us/voice/pricing).") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmRoute = null; val u = shimUrl.trimEnd('/') + "/incoming"
+                    run("Updating") { client.setNumberVoiceUrl(a, u); "Incoming calls on $a now go to VictorSMS." }
+                }) { Text("Route", color = Magenta) }
+            },
+            dismissButton = { TextButton(onClick = { confirmRoute = null }) { Text("Cancel") } },
+        )
+    }
+
+    confirmCall?.let { (a, t, price) ->
+        AlertDialog(
+            onDismissRequest = { confirmCall = null },
+            title = { Text("Call $t from alias …${a.takeLast(4)}?") },
+            text = { Text("Charged to your Twilio account: " + (price ?: "price could not be loaded (see twilio.com/en-us/voice/pricing)") + ", plus the app-leg minute rate. Nothing is dialled unless you tap Call.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmCall = null
+                    run("Calling") { VoiceCalling.placeCall(ctx, a, t).getOrThrow(); "Calling via Twilio…" }
+                }) { Text("Call", color = Magenta) }
+            },
+            dismissButton = { TextButton(onClick = { confirmCall = null }) { Text("Cancel") } },
         )
     }
 }
