@@ -8,6 +8,8 @@ matrixSdk = "26.10.15"
 navigationCompose = "2.10.2"
 securityCrypto = "1.1.0"
 coroutines = "1.11.0"
+twilioVoice = "6.10.5"
+firebaseMessaging = "26.0.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -23,6 +25,8 @@ matrix-sdk-android = { group = "org.matrix.rustcomponents", name = "sdk-android"
 androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }
 androidx-security-crypto = { group = "androidx.security", name = "security-crypto", version.ref = "securityCrypto" }
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
+twilio-voice-android = { group = "com.twilio", name = "voice-android", version.ref = "twilioVoice" }
+firebase-messaging = { group = "com.google.firebase", name = "firebase-messaging", version.ref = "firebaseMessaging" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

@@ -89,6 +89,9 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.security.crypto)
     implementation(libs.kotlinx.coroutines.android)
+    // Alias calls: Twilio Voice SDK (Twilio TOS licence) + FCM for incoming-call pushes (Apache-2.0).
+    implementation(libs.twilio.voice.android)
+    implementation(libs.firebase.messaging)
     debugImplementation(libs.androidx.compose.ui.tooling)
     testImplementation("junit:junit:4.13.2")
     // Real org.json on the JVM (android.jar stubs throw in local unit tests).

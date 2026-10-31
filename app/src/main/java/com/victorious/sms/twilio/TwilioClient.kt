@@ -36,6 +36,15 @@ class TwilioCredentials(context: Context) {
     fun setThreadIdentity(address: String, i: Identity?) =
         p.edit().apply { if (i == null) remove(threadKey(address)) else putString(threadKey(address), i.encode()) }.apply()
     fun resolve(address: String): Identity = IdentityResolver.resolve(threadIdentity(address), defaultIdentity, aliases)
+    /** Twilio Voice SDK settings (see docs/MANUAL.md "Alias calls over Twilio Voice"). */
+    var twimlAppSid: String get() = p.getString("voice.appSid", "").orEmpty(); set(v) = p.edit().putString("voice.appSid", v.trim()).apply()
+    var pushCredentialSid: String get() = p.getString("voice.pushCred", "").orEmpty(); set(v) = p.edit().putString("voice.pushCred", v.trim()).apply()
+    /** Don's own Firebase project (for incoming-call pushes). Entered at runtime; never in the repo. */
+    var fcmProjectId: String get() = p.getString("fcm.projectId", "").orEmpty(); set(v) = p.edit().putString("fcm.projectId", v.trim()).apply()
+    var fcmAppId: String get() = p.getString("fcm.appId", "").orEmpty(); set(v) = p.edit().putString("fcm.appId", v.trim()).apply()
+    var fcmApiKey: String get() = p.getString("fcm.apiKey", "").orEmpty(); set(v) = p.edit().putString("fcm.apiKey", v.trim()).apply()
+    var fcmSenderId: String get() = p.getString("fcm.senderId", "").orEmpty(); set(v) = p.edit().putString("fcm.senderId", v.trim()).apply()
+    fun fcmSet() = fcmProjectId.isNotBlank() && fcmAppId.isNotBlank() && fcmApiKey.isNotBlank() && fcmSenderId.isNotBlank()
     fun isSet() = accountSid.startsWith("AC") && apiKeySid.isNotBlank() && apiKeySecret.isNotBlank()
     fun clear() = p.edit().clear().apply()
 }
@@ -93,6 +102,21 @@ class TwilioClient(private val creds: TwilioCredentials) {
         call("POST", "$base/SIP/Domains/$dSid/Auth/Calls/CredentialListMappings.json", mapOf("CredentialListSid" to clSid))
         call("POST", "$base/SIP/Domains/$dSid/Auth/Registrations/CredentialListMappings.json", mapOf("CredentialListSid" to clSid))
         return SipDomain(dSid, d.optString("domain_name"))
+    }
+
+    /** TwiML App whose Voice URL is Don's pc/voice_shim.py /voice endpoint (outbound SDK calls). No monthly fee. */
+    fun createTwimlApp(voiceUrl: String): String {
+        require(voiceUrl.startsWith("https://")) { "Voice URL must be https://" }
+        return call("POST", "$base/Applications.json", mapOf("FriendlyName" to "VictorSMS Voice", "VoiceUrl" to voiceUrl, "VoiceMethod" to "POST")).getString("sid")
+    }
+
+    /** Points one of Don's OWN numbers' incoming calls at [voiceUrl] (pc/voice_shim.py /incoming). */
+    fun setNumberVoiceUrl(number: String, voiceUrl: String) {
+        require(voiceUrl.startsWith("https://")) { "Voice URL must be https://" }
+        val owned = listNumbers()
+        val match = FromNumberGuard.check(number, owned.map { it.phoneNumber }).getOrThrow()
+        val sid = owned.first { it.phoneNumber == match }.sid
+        call("POST", "$base/IncomingPhoneNumbers/$sid.json", mapOf("VoiceUrl" to voiceUrl, "VoiceMethod" to "POST"))
     }
 
     fun searchAvailable(country: String, areaCode: String): List<AvailableNumber> {
