@@ -282,7 +282,8 @@ timestamp window, `destructive`) and `ReplayGuard`; caller pairing by package + 
 (`PairingPolicy`); `ForbiddenKeyScanner`, import never enabling `remote.command`, merge-by-id;
 `sms.remote_command.forward` gates (`SmsTriggerGate`: whitelist AND code word, off by default, code
 word stripped); remote `sms.send` approval (never sent without Approve, exactly once, expiry, replay,
-persistence); relay `PeerPin` and pending-call persistence. Android glue (Keystore, TLS sockets,
+persistence); relay `PeerPin` and pending-call persistence; Twilio identity/`FromNumberGuard`; Twilio
+Voice access tokens and the owned-number call plan (`VoiceTokenTest`). Android glue (Keystore, TLS sockets,
 notifications, `SmsManager`) is not covered and is still not device-tested.
 
 ## 17. Spam call and text blocking (implemented, not device-tested)
@@ -320,7 +321,7 @@ notifications, `SmsManager`) is not covered and is still not device-tested.
 - Cleartext HTTP is allowed (`usesCleartextTraffic`) so mesh endpoints like `http://100.64.x.x`
   work. The mesh is WireGuard-encrypted; use https for anything off the mesh.
 
-## 19. Twilio alias number + SIP (texts implemented; SIP calling stubbed; not device-tested)
+## 19. Twilio alias number + SIP (implemented; not device-tested)
 
 - This is a **real second number owned by Don** in his own Twilio account, not spoofing. Texts
   and calls carry that Twilio number as the sender.
@@ -337,13 +338,44 @@ notifications, `SmsManager`) is not covered and is still not device-tested.
     dialog. Never automatic;
   - **alias SMS:** `POST /Messages.json` (`From` = chosen alias). User-initiated only (Twilio
     screen or the identity picker in an SMS thread, see 19a).
-- **SIP calling: stub (`SipCalling`).** `android.net.sip` is still in SDK 37 but deprecated since
-  API 31 and unsupported on most devices, so it is not used. Linphone and PJSIP are GPL and must
-  not be linked into this Apache-2.0 app. Options for Don to choose:
-  1. **baresip** (BSD-3-Clause) built with the NDK, registering to `<domain>.sip.twilio.com`;
-  2. **Twilio Voice Android SDK** (proprietary Twilio licence, uses Twilio Voice instead of plain SIP);
-  3. a SIP softphone on the PC over the mesh.
+- **Calling: Twilio Voice Android SDK** (see 19b). `android.net.sip` is deprecated since API 31 and
+  not used; Linphone and PJSIP (GPL) are not used.
 - Costs: alias texts, SIP minutes and numbers are billed by Twilio to Don's account.
+
+### 19b. Alias calls over Twilio Voice (implemented; unit-tested; not device-tested; Twilio not tested live)
+
+- **Stack choice:** `com.twilio:voice-android` 6.10.5 (Maven Central). Licence per its POM:
+  `TWILIO-TOS` (Twilio Terms of Service, https://www.twilio.com/legal/tos); bundled third-party
+  code is listed in the artifact's `ACKNOWLEDGEMENTS.md`. It is proprietary but **not GPL**, so it
+  can ship in this Apache-2.0 app as a separate dependency (it is not relicensed). baresip (BSD) via
+  NDK was rejected as unrealistic here: no maintained Android build, own audio/ICE/TLS work, and
+  Twilio SIP domains would still be needed. Push uses `com.google.firebase:firebase-messaging`
+  (Apache-2.0) initialised at runtime from Don's own project settings (no `google-services.json`
+  in the repo; auto-init and analytics disabled in the manifest).
+- **Tokens:** `VoiceToken` mints the Twilio access token (JWT HS256, `cty twilio-fpa;v=1`, Voice
+  grant: incoming allowed, `outgoing.application_sid`, `push_credential_sid`, 1 h TTL) on the phone
+  from the API key already stored encrypted for REST. So **no token server** is needed. Trade-off:
+  Twilio recommends server-side minting; here the phone already holds the key, so nothing new is
+  exposed. A scoped key for the phone is a possible later hardening.
+- **Caller ID / no spoofing:** `VoiceCalling.placeCall` fetches
+  `IncomingPhoneNumbers` live, `VoiceCallPlan.outbound` runs `FromNumberGuard` and E.164 checks,
+  `TwilioConnectionService` re-checks against that snapshot, and `pc/voice_shim.py /voice`
+  re-checks against its own live list before returning `<Dial callerId=alias>`. `/incoming` only
+  rings `<Client>don</Client>` when `To` is an owned number. Both endpoints require a valid
+  `X-Twilio-Signature`.
+- **Telecom:** `TwilioConnectionService` registers PhoneAccount `twilio-alias`
+  (`CAPABILITY_CALL_PROVIDER`). Outgoing: `TelecomManager.placeCall` → `Voice.connect`. Incoming:
+  FCM → `VoicePushService` → `Voice.handleMessage` → `addNewIncomingCall` → `CallInvite.accept` on
+  answer. Hold/mute/DTMF/disconnect map onto the Twilio `Call`; the existing `VictorInCallService`
+  and `InCallActivity` render it.
+- **Paid provisioning is never automatic:** SIP domain, TwiML App and number Voice URL changes each
+  sit behind a confirmation dialog stating the price (or that Twilio exposes no price API and where
+  to look); every call shows the Pricing API per-minute rate first. Push credentials and Firebase are
+  created by Don in the consoles, not by the app.
+- **Tests:** `VoiceTokenTest` (JWT structure, HMAC signature, input checks, owned-number-only plan),
+  `pc/test_voice_shim.py` (TwiML, spoof refusal, incoming gating, signature check).
+- **Unverified:** no live Twilio call, no device test, no FCM push received, Telecom behaviour of a
+  managed call-provider account on specific OEMs, and audio routing between Telecom and the SDK.
 
 ### 19a. Second number / identity picker (implemented; unit-tested; not device-tested; Twilio not tested live)
 

@@ -39,7 +39,7 @@ Present under `app/src/main/java/com/victorious/sms/` (do not invent beyond this
 | Native SMS | `sms/` | Native SMS components + repository; unified inbox screens |
 | Phone dialer | `phone/` | `ROLE_DIALER` keypad, `InCallService` + in-call screen, call log, caller lookup |
 | Spam blocking | `block/` | Call screening service, blocklist, patterns, Spam folder UI |
-| Twilio alias | `twilio/` | Encrypted creds, numbers / SIP domains, cost-confirmed buy, alias SMS; **SIP calling is a stub** |
+| Twilio alias | `twilio/` | Encrypted creds, numbers / SIP domains, cost-confirmed buy, alias SMS, alias calls over the Twilio Voice SDK (`pc/voice_shim.py`) |
 | Persona / assist | `assist/` | Persona drafter + voice notes with a consent gate (PC LLM/TTS over mesh — endpoints in `PcEndpoints.kt`) |
 | Bots | `ui/screens/BotScreens.kt` | Summarizer / triage bot + droidcommand-AI fleet command bot |
 | SMS remote trigger | `fleet/SmsRemoteTrigger.kt` | Whitelist + code word → `sms.remote_command.forward` (**forwards only; never executes**) |
