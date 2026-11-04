@@ -46,6 +46,7 @@ object RemoteSmsQueue {
 
     /** Attach the encrypted store once and restore unexpired requests. */
     fun ensureLoaded(context: Context) {
+        ReplayGuard.ensureLoaded(context)
         if (store != null) return
         synchronized(this) {
             if (store != null) return

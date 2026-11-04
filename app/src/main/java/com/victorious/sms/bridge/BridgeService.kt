@@ -60,7 +60,7 @@ class BridgeService : Service() {
         return when (op) {
             "capabilities.get" -> ok(id, JSONObject().put("ops", JSONArray().apply {
                 listOf(NodeStatusCapability.descriptor, SmsSendCapability.descriptor, SmsSendCapability.statusDescriptor,
-                    ConfigCapabilities.export, ConfigCapabilities.import).forEach {
+                    ConfigCapabilities.export, ConfigCapabilities.import, ConfigOps.statusDescriptor).forEach {
                     put(JSONObject().put("name", it.name).put("kind", it.kind)
                         .put("remoteAllowed", it.remoteAllowed).put("requiresConfirm", it.requiresConfirm))
                 }
@@ -87,6 +87,32 @@ class BridgeService : Service() {
                     ?: return err(id, "not_found")
                 ok(id, JSONObject().put("requestId", params.optString("requestId")).put("status", st.name.lowercase()))
             }
+            ConfigCapabilities.EXPORT ->
+                ok(id, ConfigOps.export(packageName, AppConfigStore(applicationContext).snapshot()))
+            ConfigCapabilities.IMPORT -> {
+                // Same envelope checks as sms.send; the nonce is consumed (and persisted) even for a dry run.
+                val ttlMs = if (params.has("ttlMs")) params.optLong("ttlMs") else null
+                ReplayGuard.check(params.optString("nonce"), params.optLong("timestampMs", 0L), ttlMs)?.let { return err(id, it) }
+                val policy = ConflictPolicy.fromWire(params.optString("policy").ifEmpty { null })
+                val store = AppConfigStore(applicationContext)
+                when (val r = ConfigOps.prepare(store.snapshot(), ConfigOps.fromJson(params.opt("payload")), policy)) {
+                    is ConfigOps.Prepared.Rejected -> err(id, r.code)
+                    is ConfigOps.Prepared.Plan -> {
+                        val keys = JSONArray(r.changes.keys.toList())
+                        // dryRun defaults to true: nothing is ever applied unless explicitly asked AND confirmed on device.
+                        if (params.optBoolean("dryRun", true)) ok(id, JSONObject().put("dryRun", true).put("changedKeys", keys))
+                        else {
+                            val p = ConfigOps.submit(applicationContext, caller.packageName, r.changes, ReplayGuard.effectiveTtl(ttlMs))
+                            if (p == null) ok(id, JSONObject().put("status", "no_changes").put("changedKeys", keys))
+                            else ok(id, JSONObject().put("status", "pending").put("importId", p.importId).put("changedKeys", keys))
+                        }
+                    }
+                }
+            }
+            ConfigOps.STATUS_OP -> {
+                val st = ConfigOps.status(caller.packageName, params.optString("importId")) ?: return err(id, "not_found")
+                ok(id, JSONObject().put("importId", params.optString("importId")).put("status", st.name.lowercase()))
+            }
             else -> err(id, "not_implemented")
         }
     }
@@ -94,6 +120,6 @@ class BridgeService : Service() {
     private fun ok(id: String, result: JSONObject) = JSONObject().put("id", id).put("ok", true).put("result", result)
     private fun err(id: String, code: String) = JSONObject().put("id", id).put("ok", false).put("error", code)
 
-    override fun onCreate() { super.onCreate(); authorizer = BridgeAuthorizer(this) }
+    override fun onCreate() { super.onCreate(); authorizer = BridgeAuthorizer(this); ReplayGuard.ensureLoaded(this) }
     override fun onBind(intent: Intent): IBinder = Messenger(handler).binder
 }
