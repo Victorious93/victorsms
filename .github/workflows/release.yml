@@ -1,0 +1,138 @@
+# Publish a debug-signed GitHub pre-release of VictorSMS. Manual only.
+#
+# Gates (any failure publishes nothing):
+#   - must run on main (a release can only come from reviewed code);
+#   - the tag must look like vX.Y.Z[-suffix], must not exist yet, and must equal versionName in app/build.gradle.kts;
+#   - android.yml (PC shim tests + unit tests + assembleDebug) must have a successful run for this exact commit;
+#   - every APK must carry package com.victorious.sms and the versionName that matches the tag.
+#
+# What it does NOT do: it does not sign with a release key (APKs are signed with the project's public debug key,
+# see README), and it does not run the app on a device or emulator. The release notes say so.
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag, e.g. v0.2.0. Must equal v + versionName in app/build.gradle.kts."
+        required: true
+        type: string
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Build and publish pre-release
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ inputs.tag }}
+    steps:
+      - name: Refuse anything but main
+        run: |
+          [ "$GITHUB_REF" = "refs/heads/main" ] || { echo "::error::run this workflow on main, not $GITHUB_REF" >&2; exit 1; }
+
+      - name: Check the tag
+        run: |
+          set -euo pipefail
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.]+)?$ ]] || { echo "::error::bad tag: $TAG" >&2; exit 1; }
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::release $TAG already exists" >&2; exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - name: Tag must equal versionName
+        run: |
+          set -euo pipefail
+          vname="$(sed -n 's/^[[:space:]]*versionName = "\(.*\)"$/\1/p' app/build.gradle.kts | head -n1)"
+          [ -n "$vname" ] || { echo "::error::could not read versionName" >&2; exit 1; }
+          [ "v$vname" = "$TAG" ] || { echo "::error::tag $TAG does not match versionName $vname; bump app/build.gradle.kts first" >&2; exit 1; }
+
+      - name: Require green CI for this exact commit
+        run: |
+          set -euo pipefail
+          n="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow android.yml --commit "$GITHUB_SHA" --status success --json databaseId --jq length)"
+          [ "$n" -ge 1 ] || { echo "::error::no successful android.yml run for $GITHUB_SHA; wait for CI on main, then retry" >&2; exit 1; }
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Assemble debug APKs
+        run: ./gradlew assembleDebug --stacktrace
+
+      - name: Verify APK identity
+        run: |
+          set -euo pipefail
+          AAPT2="$(ls "$ANDROID_HOME"/build-tools/*/aapt2 | sort -V | tail -n1)"
+          vname="${TAG#v}"
+          shopt -s nullglob
+          apks=(app/build/outputs/apk/debug/*-debug.apk)
+          [ "${#apks[@]}" -ge 1 ] || { echo "::error::no debug APKs were built" >&2; exit 1; }
+          for apk in "${apks[@]}"; do
+            line="$("$AAPT2" dump badging "$apk" | grep '^package:')"
+            echo "$(basename "$apk"): $line"
+            grep -q "name='com.victorious.sms'" <<<"$line" || { echo "::error::$apk has the wrong package id" >&2; exit 1; }
+            grep -q "versionName='$vname'" <<<"$line" || { echo "::error::$apk versionName is not $vname" >&2; exit 1; }
+          done
+
+      - name: Checksums
+        run: |
+          set -euo pipefail
+          mkdir dist
+          cp app/build/outputs/apk/debug/*-debug.apk dist/
+          (cd dist && sha256sum *.apk > SHA256SUMS && sha256sum -c SHA256SUMS)
+
+      - name: Publish GitHub pre-release
+        run: |
+          set -euo pipefail
+          {
+            echo "Debug-signed pre-release built by CI from commit ${GITHUB_SHA}. Sideload only; not Play Store or production-signed"
+            echo "(signed with the project's public debug key, see README)."
+            echo
+            echo "**Checks executed for this exact commit before publishing:**"
+            echo "- android.yml (PC shim tests, unit tests, assembleDebug): green."
+            echo "- APK identity: package com.victorious.sms and versionName equal to the tag, for every APK attached."
+            echo
+            echo "**Not executed:** the APKs attached here were not run on any device or emulator."
+            echo "Verify the download with \`sha256sum -c SHA256SUMS\`."
+          } > notes.md
+          gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --prerelease --title "VictorSMS ${TAG} (debug-signed pre-release)" \
+            --notes-file notes.md --generate-notes
+
+      # Releases created with GITHUB_TOKEN do not fire 'release' events, so fdroid-ping.yml would not run for
+      # them; ping fleet-fdroid directly. Never fails the job.
+      - name: Notify fleet-fdroid
+        env:
+          FDROID_DISPATCH_TOKEN: ${{ secrets.FDROID_DISPATCH_TOKEN }}
+        run: |
+          if [ -z "${FDROID_DISPATCH_TOKEN:-}" ]; then
+            echo "::notice::FDROID_DISPATCH_TOKEN is not set; skipping fleet-fdroid refresh."
+            exit 0
+          fi
+          payload="$(jq -nc --arg repo "$GITHUB_REPOSITORY" --arg tag "$TAG" \
+            '{event_type: "new-release", client_payload: {repo: $repo, tag: $tag}}')"
+          code="$(curl -sS -o /tmp/fdroid-resp -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer ${FDROID_DISPATCH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/Victorious93/fleet-fdroid/dispatches \
+            -d "$payload" || echo 000)"
+          if [ "$code" = "204" ]; then
+            echo "Sent new-release ($GITHUB_REPOSITORY $TAG) to Victorious93/fleet-fdroid."
+          else
+            echo "::warning::fleet-fdroid dispatch returned HTTP $code: $(cat /tmp/fdroid-resp 2>/dev/null)"
+          fi
