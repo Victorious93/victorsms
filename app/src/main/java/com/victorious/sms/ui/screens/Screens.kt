@@ -64,7 +64,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
-private fun Page(title: String, actions: @Composable () -> Unit = {}, content: @Composable () -> Unit) {
+internal fun Page(title: String, actions: @Composable () -> Unit = {}, content: @Composable () -> Unit) {
     Column(Modifier.fillMaxSize().background(Charcoal).safeDrawingPadding()) {
         Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
@@ -141,6 +141,7 @@ fun RoomListScreen(
     onOpen: (accountId: String, roomId: String) -> Unit,
     onOpenSms: (threadId: Long, address: String) -> Unit,
     onOpenBot: (kind: String) -> Unit = {},
+    onOpenMail: (account: String, threadRoot: String) -> Unit = { _, _ -> },
     onHelp: () -> Unit,
     onSettings: () -> Unit,
     onAddAccount: () -> Unit,
@@ -164,6 +165,21 @@ fun RoomListScreen(
     val twilio = remember { com.victorious.sms.twilio.TwilioCredentials(ctx) }
     var aliasThreads by remember { mutableStateOf(emptyList<com.victorious.sms.twilio.AliasMessage>()) }
     var filter by remember { mutableStateOf("all") }
+    var query by remember { mutableStateOf("") }
+    var unreadOnly by remember { mutableStateOf(false) }
+    // Email: sync every configured mailbox in the background; the rows come from the local cache so the inbox works offline.
+    val mail = remember { com.victorious.sms.mail.MailRuntime.get(ctx) }
+    var mailRows by remember { mutableStateOf(emptyList<com.victorious.sms.inbox.InboxRow>()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            withContext(Dispatchers.IO) {
+                mailRows = runCatching { mail.inboxRows() }.getOrDefault(mailRows)       // cached rows first (offline-safe)
+                for (a in mail.accounts()) runCatching { mail.sync(a) }                  // a failing mailbox never blocks the others
+                mailRows = runCatching { mail.inboxRows() }.getOrDefault(mailRows)
+            }
+            kotlinx.coroutines.delay(60_000)
+        }
+    }
     LaunchedEffect(Unit) {
         while (true) {
             if (twilio.isSet() && twilio.aliases.isNotEmpty()) {
@@ -189,10 +205,14 @@ fun RoomListScreen(
         InboxEntry.Bot("fleet", "Fleet (droidcommand-AI)", "Send a command to droidcommand-AI"),
     )
     val aliasEntries = aliasThreads.map { InboxEntry.Alias(it) }
-    val entries: List<InboxEntry> = when (filter) {
-        "sim" -> smsThreads.map { InboxEntry.Sms(it) }
-        "alias" -> aliasEntries
-        else -> bots + (smsThreads.map { InboxEntry.Sms(it) } + aliasEntries).sortedByDescending { it.dateMs } + roomsByAccount.values.flatten().map { InboxEntry.Matrix(it) }
+    val mailEntries = mailRows.map { InboxEntry.Mail(it) }
+    val all: List<InboxEntry> = bots + (smsThreads.map { InboxEntry.Sms(it) } + aliasEntries + mailEntries).sortedByDescending { it.dateMs } +
+        roomsByAccount.values.flatten().map { InboxEntry.Matrix(it) }
+    val needle = query.trim().lowercase()
+    val entries: List<InboxEntry> = all.filter { e ->
+        (filter == "all" || e.channel == filter) &&
+            (!unreadOnly || e.unread > 0) &&
+            (needle.isEmpty() || listOf(e.title, e.subtitle, e.account, e.badge).any { it.lowercase().contains(needle) })
     }
     val scope = rememberCoroutineScope()
     var menu by remember { mutableStateOf(false) }
@@ -229,13 +249,14 @@ fun RoomListScreen(
                 }) { Text("Set up", color = Cyan) }
             }
         }
-        if (aliasThreads.isNotEmpty() || twilio.aliases.isNotEmpty()) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
-                listOf("all" to "All", "sim" to "SIM", "alias" to "Alias").forEach { (k, l) ->
-                    TextButton(onClick = { filter = k }) { Text(if (filter == k) "[$l]" else l, color = if (filter == k) Magenta else Cyan) }
-                }
+        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            listOf("all" to "All", "sms" to "SMS", "email" to "Email", "matrix" to "Matrix", "alias" to "Alias").forEach { (k, l) ->
+                TextButton(onClick = { filter = k }) { Text(if (filter == k) "[$l]" else l, color = if (filter == k) Magenta else Cyan) }
             }
+            TextButton(onClick = { unreadOnly = !unreadOnly }) { Text(if (unreadOnly) "[Unread]" else "Unread", color = if (unreadOnly) Magenta else Cyan) }
         }
+        OutlinedTextField(query, { query = it }, singleLine = true, placeholder = { Text("Search all conversations") },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp))
         if (entries.isEmpty()) {
             Text("No conversations yet.", color = MaterialTheme.colorScheme.onBackground, modifier = Modifier.padding(24.dp))
         }
@@ -248,6 +269,7 @@ fun RoomListScreen(
                             is InboxEntry.Matrix -> onOpen(e.r.accountId, e.r.id)
                             is InboxEntry.Bot -> onOpenBot(e.kind)
                             is InboxEntry.Alias -> onOpenSms(-1L, e.m.peer)
+                            is InboxEntry.Mail -> onOpenMail(e.r.key.account, e.r.key.sourceThread)
                         }
                     }.padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -256,9 +278,12 @@ fun RoomListScreen(
                         Text(e.title, color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.SemiBold, maxLines = 1)
                         Text(e.subtitle, color = Cyan.copy(alpha = 0.6f), fontSize = 12.sp, maxLines = 1)
                     }
+                    if (e.unread > 0) Text("${e.unread}", color = Charcoal, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                        modifier = Modifier.background(Cyan, RoundedCornerShape(10.dp)).padding(horizontal = 7.dp, vertical = 1.dp))
+                    Spacer(Modifier.padding(3.dp))
                     Text(
                         e.badge, color = Charcoal, fontSize = 11.sp, fontWeight = FontWeight.Bold,
-                        modifier = Modifier.background(if (e is InboxEntry.Alias) Magenta else if (e.source == MessageSource.SMS) Cyan else Magenta, RoundedCornerShape(8.dp))
+                        modifier = Modifier.background(if (e is InboxEntry.Alias || e is InboxEntry.Mail) Magenta else if (e.source == MessageSource.SMS) Cyan else Magenta, RoundedCornerShape(8.dp))
                             .padding(horizontal = 8.dp, vertical = 2.dp),
                     )
                 }
@@ -333,12 +358,19 @@ val SMS_PERMISSIONS = buildList {
 
 sealed class InboxEntry {
     abstract val key: String; abstract val title: String; abstract val subtitle: String; abstract val source: MessageSource; open val badge: String get() = source.label; open val dateMs: Long get() = 0L
+    /** Channel for the All/SMS/Email/Matrix/Alias filters, the account/SIM/alias shown on the row, and unread count. */
+    open val channel: String get() = "matrix"
+    open val account: String get() = ""
+    open val unread: Int get() = 0
     data class Sms(val t: SmsThread) : InboxEntry() {
         override val key get() = "sms:${t.threadId}"
         override val title get() = t.address
         override val subtitle get() = t.snippet
         override val source get() = MessageSource.SMS
         override val dateMs get() = t.dateMs
+        override val channel get() = "sms"
+        override val account get() = "SIM"
+        override val badge get() = "SMS · SIM"
     }
     /** Latest text with someone on one of Don's Twilio alias numbers. */
     data class Alias(val m: com.victorious.sms.twilio.AliasMessage) : InboxEntry() {
@@ -348,12 +380,28 @@ sealed class InboxEntry {
         override val source get() = MessageSource.SMS
         override val badge get() = "Alias …" + m.alias.takeLast(4)
         override val dateMs get() = m.dateMs
+        override val channel get() = "alias"
+        override val account get() = m.alias
     }
     data class Matrix(val r: RoomSummary) : InboxEntry() {
         override val key get() = "mx:${r.accountId}:${r.id}"
         override val title get() = r.name
         override val subtitle get() = r.accountId
         override val source get() = r.source
+        override val account get() = r.accountId
+        override val badge get() = r.source.label + " · " + r.accountId.substringBefore(':').take(18)
+    }
+    /** One email conversation. Keyed by mailbox + thread root, so two senders with one display name stay separate. */
+    data class Mail(val r: com.victorious.sms.inbox.InboxRow) : InboxEntry() {
+        override val key get() = "mail:${r.key.id}"
+        override val title get() = r.title + "  <" + r.counterpart + ">"
+        override val subtitle get() = r.snippet
+        override val source get() = MessageSource.EMAIL
+        override val badge get() = "Email · " + r.accountLabel
+        override val dateMs get() = r.timeMs
+        override val channel get() = "email"
+        override val account get() = r.accountLabel
+        override val unread get() = r.unread
     }
     data class Bot(val kind: String, override val title: String, override val subtitle: String) : InboxEntry() {
         override val key get() = "bot:$kind"

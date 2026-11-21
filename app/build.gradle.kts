@@ -85,6 +85,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
+    implementation(project(":mailcore"))
     implementation(libs.matrix.sdk.android)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.security.crypto)

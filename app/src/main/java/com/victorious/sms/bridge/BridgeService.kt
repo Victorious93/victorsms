@@ -60,6 +60,8 @@ class BridgeService : Service() {
         return when (op) {
             "capabilities.get" -> ok(id, JSONObject().put("ops", JSONArray().apply {
                 listOf(NodeStatusCapability.descriptor, SmsSendCapability.descriptor, SmsSendCapability.statusDescriptor,
+                    CapabilityDescriptor("message.draft", kind = "action", remoteAllowed = true, requiresConfirm = true),
+                    CapabilityDescriptor("message.draft.status", kind = "read", remoteAllowed = true, requiresConfirm = false),
                     ConfigCapabilities.export, ConfigCapabilities.import, ConfigOps.statusDescriptor).forEach {
                     put(JSONObject().put("name", it.name).put("kind", it.kind)
                         .put("remoteAllowed", it.remoteAllowed).put("requiresConfirm", it.requiresConfirm))
@@ -80,6 +82,31 @@ class BridgeService : Service() {
                         ok(id, JSONObject().put("requestId", r.requestId).put("status", "pending"))
                     is RemoteSmsQueue.Result.Rejected -> err(id, r.code)
                 }
+            }
+            "message.draft" -> {
+                // A draft prepared on VictorLinux: shown for review, never sent by this call. Only the owner's Send button sends.
+                ReplayGuard.check(params.optString("nonce"), params.optLong("timestampMs", 0L), if (params.has("ttlMs")) params.optLong("ttlMs") else null)?.let { return err(id, it) }
+                fun list(k: String) = params.optJSONArray(k)?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: emptyList()
+                val d = com.victorious.sms.inbox.IncomingDraft(params.optString("draftId").take(64), params.optString("kind"), list("to"), list("cc"), list("bcc"),
+                    params.optString("subject").take(998), params.optString("body").take(20000), params.optString("identityHint").take(200))
+                if (d.draftId.isBlank()) return err(id, "invalid_parameters")
+                val rt = com.victorious.sms.mail.MailRuntime.get(applicationContext)
+                when (val r = rt.handoff.receive(d)) {
+                    is com.victorious.sms.inbox.ReceiveResult.Shown -> {
+                        rt.draftOwners.put(d.draftId, caller.packageName)
+                        DraftReviewActivity.notifyReview(applicationContext, d.draftId)
+                        ok(id, JSONObject().put("draftId", d.draftId).put("status", "draft_received"))
+                    }
+                    is com.victorious.sms.inbox.ReceiveResult.AlreadySeen -> ok(id, JSONObject().put("draftId", d.draftId).put("status", r.state.name.lowercase()))
+                    is com.victorious.sms.inbox.ReceiveResult.Refused -> err(id, "invalid_parameters")
+                }
+            }
+            "message.draft.status" -> {
+                val rt = com.victorious.sms.mail.MailRuntime.get(applicationContext)
+                val did = params.optString("draftId")
+                if (rt.draftOwners.loadAll()[did] != caller.packageName) return err(id, "not_found")     // only the proposing app
+                val st = rt.handoff.state(did) ?: return err(id, "not_found")
+                ok(id, JSONObject().put("draftId", did).put("status", st.name.lowercase()))
             }
             SmsSendCapability.STATUS_OP -> {
                 RemoteSmsQueue.ensureLoaded(applicationContext)

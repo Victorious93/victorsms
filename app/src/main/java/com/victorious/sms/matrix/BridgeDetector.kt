@@ -5,7 +5,7 @@ import org.json.JSONObject
 /** Where a conversation comes from; shown as a badge in the unified inbox. */
 enum class MessageSource(val label: String) {
     SMS("SMS"), MATRIX("Matrix"), TELEGRAM("Telegram"), SIGNAL("Signal"), WHATSAPP("WhatsApp"),
-    MESSENGER("Messenger"), INSTAGRAM("Instagram"), DISCORD("Discord"), GMESSAGES("Google Messages"),
+    MESSENGER("Messenger"), INSTAGRAM("Instagram"), DISCORD("Discord"), GMESSAGES("Google Messages"), EMAIL("Email"),
 }
 
 /**

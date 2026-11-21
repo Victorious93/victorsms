@@ -45,6 +45,7 @@
                 <action android:name="com.victorious.launch.action.FLEET_THEME_CHANGED" />
             </intent-filter>
         </receiver>
+        <activity android:name=".bridge.DraftReviewActivity" android:exported="false" />
         <receiver
             android:name=".sms.SmsDeliverReceiver"
             android:exported="true"

@@ -54,6 +54,8 @@ class MainActivity : ComponentActivity() {
                             onConnectedApps = { nav.navigate("connected_apps") },
                             onPairedPhones = { nav.navigate("paired_phones") },
                             extra = listOf(
+                                "Email accounts" to { nav.navigate("mail_accounts") },
+                                "Email outbox" to { nav.navigate("mail_outbox") },
                                 "Blocking & spam" to { nav.navigate("blocking") },
                                 "Spam folder" to { nav.navigate("spam") },
                                 "Caller lookup" to { nav.navigate("lookup") },
@@ -65,6 +67,17 @@ class MainActivity : ComponentActivity() {
                                 },
                             ),
                         ) { nav.popBackStack() }
+                    }
+                    composable("mail_accounts") { com.victorious.sms.ui.screens.MailAccountsScreen { nav.popBackStack() } }
+                    composable("mail_outbox") { com.victorious.sms.ui.screens.MailOutboxScreen { nav.popBackStack() } }
+                    composable("mail/{acct}/{root}") { e ->
+                        val acct = Uri.decode(e.arguments?.getString("acct").orEmpty()); val root = Uri.decode(e.arguments?.getString("root").orEmpty())
+                        com.victorious.sms.ui.screens.MailThreadScreen(acct, root,
+                            onCompose = { id, mode -> nav.navigate("mail_compose/" + Uri.encode(acct) + "/" + Uri.encode(id) + "/" + mode) }) { nav.popBackStack() }
+                    }
+                    composable("mail_compose/{acct}/{id}/{mode}") { e ->
+                        com.victorious.sms.ui.screens.MailComposeScreen(Uri.decode(e.arguments?.getString("acct").orEmpty()),
+                            Uri.decode(e.arguments?.getString("id").orEmpty()), e.arguments?.getString("mode").orEmpty()) { nav.popBackStack() }
                     }
                     composable("blocking") { BlockingScreen { nav.popBackStack() } }
                     composable("bot/{kind}") { e ->
@@ -85,6 +98,7 @@ class MainActivity : ComponentActivity() {
                             onOpen = { acc, id -> nav.navigate("room/" + Uri.encode(acc) + "/" + Uri.encode(id)) },
                             onOpenSms = { tid, addr -> nav.navigate("sms/$tid/" + Uri.encode(addr)) },
                             onOpenBot = { kind -> nav.navigate("bot/$kind") },
+                            onOpenMail = { acct, root -> nav.navigate("mail/" + Uri.encode(acct) + "/" + Uri.encode(root)) },
                             onHelp = { nav.navigate("help") },
                             onSettings = { nav.navigate("settings") },
                             onAddAccount = { nav.navigate("add_account") },
