@@ -15,6 +15,8 @@
     <uses-permission android:name="android.permission.READ_SMS" />
     <uses-permission android:name="android.permission.RECEIVE_MMS" />
     <uses-permission android:name="android.permission.RECEIVE_WAP_PUSH" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
     <queries>
         <package android:name="com.victorious.launch" />
         <package android:name="com.victorious.mesh" />
@@ -62,6 +64,10 @@
                 <data android:mimeType="application/vnd.wap.mms-message" />
             </intent-filter>
         </receiver>
+        <receiver android:name=".sms.MmsDownloadedReceiver" android:exported="false">
+            <intent-filter><action android:name="com.victorious.sms.MMS_DOWNLOADED" /></intent-filter>
+        </receiver>
+        <activity android:name=".bridge.ReviewDraftActivity" android:exported="false" android:excludeFromRecents="true" android:theme="@style/Theme.VictorSMS" />
         <service
             android:name=".sms.HeadlessSmsSendService"
             android:exported="true"

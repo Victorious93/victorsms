@@ -60,6 +60,8 @@ android {
     }
     buildFeatures { compose = true }
 
+    packaging { resources { excludes += listOf("META-INF/NOTICE*", "META-INF/LICENSE*", "META-INF/DEPENDENCIES", "META-INF/*.md", "META-INF/INDEX.LIST", "META-INF/io.netty.versions.properties") } }
+
     // One APK per ABI (the Matrix Rust SDK ships large native libs for every ABI).
     splits {
         abi {
@@ -86,6 +88,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
     implementation(libs.matrix.sdk.android)
+    implementation(project(":mail-core"))   // IMAP/SMTP, outbox, sanitiser (Angus Mail, jsoup)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.security.crypto)
     implementation(libs.kotlinx.coroutines.android)

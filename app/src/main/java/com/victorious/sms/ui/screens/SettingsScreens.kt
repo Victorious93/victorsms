@@ -98,6 +98,7 @@ fun ConnectedAppsScreen(onBack: () -> Unit) {
                                 when (g) {
                                     OpGroup.READ -> "Read-only: status and threads"
                                     OpGroup.SEND -> "Send (each send still needs your confirmation)"
+                                    OpGroup.DRAFT -> "Drafts: show drafts from your PC for your review (never sends by itself)"
                                 },
                                 color = MaterialTheme.colorScheme.onBackground, fontSize = 13.sp,
                             )

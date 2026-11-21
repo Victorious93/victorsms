@@ -38,6 +38,12 @@ class ImapClient(private val account: MailAccount) {
         } finally { try { f.close(false) } catch (_: Exception) { } }
     }
 
+    /** Re-fetch one message including attachment bytes (the app caches text/HTML only). */
+    fun fetchOne(folderName: String, uid: Long): MailMessage? = withStore { st ->
+        val f = st.getFolder(folderName) as IMAPFolder; f.open(Folder.READ_ONLY)
+        try { f.getMessageByUID(uid)?.let { toMail(f, it as MimeMessage) } } finally { try { f.close(false) } catch (_: Exception) { } }
+    }
+
     fun setSeen(folderName: String, uid: Long, seen: Boolean) = withStore { st ->
         val f = st.getFolder(folderName) as IMAPFolder; f.open(Folder.READ_WRITE)
         try { f.getMessageByUID(uid)?.setFlag(Flags.Flag.SEEN, seen) } finally { f.close(false) }

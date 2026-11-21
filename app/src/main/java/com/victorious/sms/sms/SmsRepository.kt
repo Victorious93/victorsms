@@ -10,7 +10,7 @@ import android.os.Build
 import android.provider.Telephony
 import android.telephony.SmsManager
 
-data class SmsThread(val threadId: Long, val address: String, val snippet: String, val dateMs: Long)
+data class SmsThread(val threadId: Long, val address: String, val snippet: String, val dateMs: Long, val unread: Boolean = false)
 data class SmsMessage(val id: Long, val address: String, val body: String, val dateMs: Long, val outgoing: Boolean)
 
 /** Reads SMS threads from the Telephony provider and sends via SmsManager (user-initiated only). */
@@ -38,13 +38,13 @@ class SmsRepository(private val context: Context) {
         val seen = LinkedHashMap<Long, SmsThread>()
         context.contentResolver.query(
             Telephony.Sms.CONTENT_URI,
-            arrayOf(Telephony.Sms.THREAD_ID, Telephony.Sms.ADDRESS, Telephony.Sms.BODY, Telephony.Sms.DATE),
+            arrayOf(Telephony.Sms.THREAD_ID, Telephony.Sms.ADDRESS, Telephony.Sms.BODY, Telephony.Sms.DATE, Telephony.Sms.READ, Telephony.Sms.TYPE),
             null, null, "${Telephony.Sms.DATE} DESC",
         )?.use { c ->
             var n = 0
             while (c.moveToNext() && n++ < limit) {
                 val tid = c.getLong(0)
-                if (tid !in seen) seen[tid] = SmsThread(tid, c.getString(1).orEmpty(), c.getString(2).orEmpty(), c.getLong(3))
+                if (tid !in seen) seen[tid] = SmsThread(tid, c.getString(1).orEmpty(), c.getString(2).orEmpty(), c.getLong(3), unread = c.getInt(4) == 0 && c.getInt(5) == Telephony.Sms.MESSAGE_TYPE_INBOX)
             }
         }
         return seen.values.toList()

@@ -54,6 +54,8 @@ class MainActivity : ComponentActivity() {
                             onConnectedApps = { nav.navigate("connected_apps") },
                             onPairedPhones = { nav.navigate("paired_phones") },
                             extra = listOf(
+                                "Email accounts" to { nav.navigate("mail_accounts") },
+                                "Email outbox" to { nav.navigate("mail_outbox") },
                                 "Blocking & spam" to { nav.navigate("blocking") },
                                 "Spam folder" to { nav.navigate("spam") },
                                 "Caller lookup" to { nav.navigate("lookup") },
@@ -85,6 +87,8 @@ class MainActivity : ComponentActivity() {
                             onOpen = { acc, id -> nav.navigate("room/" + Uri.encode(acc) + "/" + Uri.encode(id)) },
                             onOpenSms = { tid, addr -> nav.navigate("sms/$tid/" + Uri.encode(addr)) },
                             onOpenBot = { kind -> nav.navigate("bot/$kind") },
+                            onOpenMail = { acc, key -> nav.navigate("mail_thread/" + Uri.encode(acc) + "/" + Uri.encode(key)) },
+                            onCompose = { nav.navigate("mail_compose/-/new/-") },
                             onHelp = { nav.navigate("help") },
                             onSettings = { nav.navigate("settings") },
                             onAddAccount = { nav.navigate("add_account") },
@@ -105,6 +109,16 @@ class MainActivity : ComponentActivity() {
                     }
                     composable("sms_new") {
                         SmsThreadScreen(-1L, composeTo, composeBody) { nav.popBackStack() }
+                    }
+                    composable("mail_accounts") { com.victorious.sms.ui.screens.MailAccountsScreen { nav.popBackStack() } }
+                    composable("mail_outbox") { com.victorious.sms.ui.screens.MailOutboxScreen { nav.popBackStack() } }
+                    composable("mail_thread/{acc}/{key}") { e ->
+                        val acc = Uri.decode(e.arguments?.getString("acc").orEmpty()); val key = Uri.decode(e.arguments?.getString("key").orEmpty())
+                        com.victorious.sms.ui.screens.MailThreadScreen(acc, key, onReply = { mode, ref -> nav.navigate("mail_compose/" + Uri.encode(acc) + "/$mode/" + Uri.encode(ref)) }) { nav.popBackStack() }
+                    }
+                    composable("mail_compose/{acc}/{mode}/{ref}") { e ->
+                        val acc = Uri.decode(e.arguments?.getString("acc").orEmpty()).takeIf { it != "-" }.orEmpty()
+                        com.victorious.sms.ui.screens.MailComposeScreen(acc, e.arguments?.getString("mode").orEmpty(), Uri.decode(e.arguments?.getString("ref").orEmpty()).takeIf { it != "-" }.orEmpty()) { nav.popBackStack() }
                     }
                     composable("help") { HelpScreen { nav.popBackStack() } }
                 }

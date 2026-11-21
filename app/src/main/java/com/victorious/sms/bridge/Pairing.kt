@@ -8,12 +8,13 @@ import androidx.security.crypto.MasterKey
 import java.security.MessageDigest
 
 /** Op groups a paired app may be granted. Nothing is granted by default. */
-enum class OpGroup { READ, SEND }
+enum class OpGroup { READ, SEND, DRAFT }   // DRAFT (desktop drafts for owner review) is granted separately from SEND
 
 /** Which group an op belongs to; null = not exposed to paired apps. */
 fun opGroupOf(op: String): OpGroup? = when (op) {
     "capabilities.get", NodeStatusCapability.OP, "sms.list_threads", "sms.read_thread", "sms.status" -> OpGroup.READ
     "sms.send", "sms.send.status" -> OpGroup.SEND
+    DraftCapability.OP_DELIVER, DraftCapability.OP_STATUS -> OpGroup.DRAFT
     else -> null
 }
 

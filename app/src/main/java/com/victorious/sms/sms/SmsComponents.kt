@@ -36,11 +36,6 @@ class SmsDeliverReceiver : BroadcastReceiver() {
     }
 }
 
-/** WAP_PUSH_DELIVER for MMS. Required for the default SMS role; MMS download is planned. */
-class MmsWapPushReceiver : BroadcastReceiver() {
-    override fun onReceive(context: Context, intent: Intent) { /* planned: download + store MMS */ }
-}
-
 /** RESPOND_VIA_MESSAGE ("reply with text" on incoming calls). Sends only text the user typed. */
 class HeadlessSmsSendService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
