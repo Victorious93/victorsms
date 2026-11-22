@@ -60,6 +60,17 @@ android {
     }
     buildFeatures { compose = true }
 
+    packaging { resources { excludes += listOf("META-INF/NOTICE*", "META-INF/LICENSE*", "META-INF/DEPENDENCIES", "META-INF/*.md", "META-INF/INDEX.LIST", "META-INF/io.netty.versions.properties") } }
+
+    // Two editions (see docs/EDITIONS.md):
+    //   standard — Apache-2.0 sources + proprietary Twilio Voice SDK (alias calls over Twilio); no SIP engine.
+    //   voip     — Linphone SDK (GPLv3) own-SIP-server calling; NO Twilio Voice SDK. Binaries of this edition are GPLv3.
+    flavorDimensions += "edition"
+    productFlavors {
+        create("standard") { dimension = "edition" }
+        create("voip") { dimension = "edition"; applicationIdSuffix = ".voip"; versionNameSuffix = "-voip" }
+    }
+
     // One APK per ABI (the Matrix Rust SDK ships large native libs for every ABI).
     splits {
         abi {
@@ -86,12 +97,14 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
     implementation(libs.matrix.sdk.android)
+    implementation(project(":mail-core"))   // IMAP/SMTP, outbox, sanitiser (Angus Mail, jsoup)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.security.crypto)
     implementation(libs.kotlinx.coroutines.android)
     // Alias calls: Twilio Voice SDK (Twilio TOS licence) + FCM for incoming-call pushes (Apache-2.0).
-    implementation(libs.twilio.voice.android)
-    implementation(libs.firebase.messaging)
+    "standardImplementation"(libs.twilio.voice.android)
+    "standardImplementation"(libs.firebase.messaging)
+    "voipImplementation"("org.linphone:linphone-sdk-android:5.3.+")   // GPLv3; repo: download.linphone.org/maven_repository
     debugImplementation(libs.androidx.compose.ui.tooling)
     testImplementation("junit:junit:4.13.2")
     // Real org.json on the JVM (android.jar stubs throw in local unit tests).

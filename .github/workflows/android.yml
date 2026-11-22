@@ -18,29 +18,29 @@ jobs:
       - name: PC shim tests
         run: cd pc && python3 -m unittest -v test_voice_shim
       - name: Unit tests
-        run: ./gradlew :app:testDebugUnitTest --stacktrace
+        run: ./gradlew :mail-core:test :app:testStandardDebugUnitTest --stacktrace
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: unit-test-reports
           path: |
-            app/build/reports/tests/testDebugUnitTest/
-            app/build/test-results/testDebugUnitTest/
+            app/build/reports/tests/testStandardDebugUnitTest/
+            app/build/test-results/testStandardDebugUnitTest/
           if-no-files-found: warn
       - name: Assemble debug
-        run: ./gradlew assembleDebug --stacktrace
+        run: ./gradlew assembleStandardDebug --stacktrace
       - uses: actions/upload-artifact@v4
         with:
           name: victorsms-debug-arm64-v8a
-          path: app/build/outputs/apk/debug/*-arm64-v8a-debug.apk
+          path: app/build/outputs/apk/standard/debug/*-arm64-v8a-debug.apk
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
           name: victorsms-debug-armeabi-v7a
-          path: app/build/outputs/apk/debug/*-armeabi-v7a-debug.apk
+          path: app/build/outputs/apk/standard/debug/*-armeabi-v7a-debug.apk
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
           name: victorsms-debug-x86_64
-          path: app/build/outputs/apk/debug/*-x86_64-debug.apk
+          path: app/build/outputs/apk/standard/debug/*-x86_64-debug.apk
           if-no-files-found: error

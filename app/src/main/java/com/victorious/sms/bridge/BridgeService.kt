@@ -59,7 +59,7 @@ class BridgeService : Service() {
         }
         return when (op) {
             "capabilities.get" -> ok(id, JSONObject().put("ops", JSONArray().apply {
-                listOf(NodeStatusCapability.descriptor, SmsSendCapability.descriptor, SmsSendCapability.statusDescriptor,
+                listOf(NodeStatusCapability.descriptor, SmsSendCapability.descriptor, SmsSendCapability.statusDescriptor, DraftCapability.deliver, DraftCapability.status,
                     ConfigCapabilities.export, ConfigCapabilities.import, ConfigOps.statusDescriptor).forEach {
                     put(JSONObject().put("name", it.name).put("kind", it.kind)
                         .put("remoteAllowed", it.remoteAllowed).put("requiresConfirm", it.requiresConfirm))
@@ -80,6 +80,19 @@ class BridgeService : Service() {
                         ok(id, JSONObject().put("requestId", r.requestId).put("status", "pending"))
                     is RemoteSmsQueue.Result.Rejected -> err(id, r.code)
                 }
+            }
+            DraftCapability.OP_DELIVER -> {
+                DraftReview.ensureLoaded(applicationContext)
+                when (val r = DraftHandoff.deliver(caller, params, System.currentTimeMillis()) { DraftReview.notify(applicationContext, it) }) {
+                    is DraftHandoff.Result.Accepted -> ok(id, JSONObject().put("draftId", r.draftId).put("state", r.state.name.lowercase()))
+                    is DraftHandoff.Result.Rejected -> err(id, r.code)
+                }
+            }
+            DraftCapability.OP_STATUS -> {
+                DraftReview.ensureLoaded(applicationContext)
+                val st = DraftHandoff.status(caller, params.optString("draftId")) ?: return err(id, "not_found")
+                val d = DraftHandoff.get(caller.packageName, params.optString("draftId"))
+                ok(id, JSONObject().put("draftId", params.optString("draftId")).put("state", st.name.lowercase()).apply { d?.detail?.let { put("detail", it.take(200)) } })
             }
             SmsSendCapability.STATUS_OP -> {
                 RemoteSmsQueue.ensureLoaded(applicationContext)

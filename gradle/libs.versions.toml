@@ -1,6 +1,6 @@
 [versions]
 agp = "9.4.1"
-kotlin = "2.4.21"
+kotlin = "2.4.10"
 composeBom = "2026.09.00"
 activityCompose = "1.13.0"
 coreKtx = "1.19.1"
@@ -10,6 +10,9 @@ securityCrypto = "1.1.0"
 coroutines = "1.11.0"
 twilioVoice = "6.10.5"
 firebaseMessaging = "26.0.1"
+angusMail = "2.0.3"
+jsoup = "1.18.3"
+greenmail = "2.1.2"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -28,6 +31,11 @@ kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 twilio-voice-android = { group = "com.twilio", name = "voice-android", version.ref = "twilioVoice" }
 firebase-messaging = { group = "com.google.firebase", name = "firebase-messaging", version.ref = "firebaseMessaging" }
 
+angus-mail = { group = "org.eclipse.angus", name = "angus-mail", version.ref = "angusMail" }
+jsoup = { group = "org.jsoup", name = "jsoup", version.ref = "jsoup" }
+greenmail = { group = "com.icegreen", name = "greenmail", version.ref = "greenmail" }
+
 [plugins]
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }

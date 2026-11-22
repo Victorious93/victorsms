@@ -338,3 +338,24 @@ You can deny any optional permission; the related feature simply stays off.
 - `config.import` needs a nonce, timestampMs and ttlMs, and is a dry run unless `dryRun:false` is set. A real import is held as pending until you approve it on this phone. Poll it with `config.import.status`. An import can never enable external control or remote commands.
 - Used nonces are now saved encrypted until they expire, so a restart doesn't reopen the replay window.
 - Bridge badges come from the mautrix `m.bridge`/`uk.half-shot.bridge` state first, then from the bridge bot being in the room, and only then from the member-ID prefix.
+
+## Email (new)
+
+* **Add an account:** Settings → Email accounts → manual IMAP/SMTP. TLS is required (implicit TLS or STARTTLS; plaintext is never offered). Certificates are validated; for a private server you may pin its certificate SHA-256. Passwords are stored encrypted (Android Keystore) and never leave the phone. Sign-in with Google/Microsoft needs this project's own OAuth registration and is **not available** in this build: use an app password.
+* **Inbox:** texts, email, Matrix and alias chats appear together with a channel badge and the SIM/account under the title. Filters: All, SMS, Email, Matrix, Alias, Unread; search covers names, addresses, accounts and text. Two contacts with the same name stay separate rows; the same person over SMS and email has two rows, and each reply goes out on its own channel and identity. A failed send never switches channel.
+* **Compose / Reply / Reply all / Forward / Cc / Bcc / attachments / drafts:** replies use the account the mail arrived on and honour Reply-To; threading headers are kept.
+* **Outbox:** sends are queued on the phone. If the connection drops after the server may have accepted a message the state is **UNCERTAIN**: it is never re-sent automatically; choose "Send again anyway" (same Message-ID) or "It arrived".
+* **Remote images are blocked** in HTML mail by default (per-message "show"); scripts, forms and frames are always removed.
+* Email-only use needs neither the default-SMS role nor Matrix; SMS-only use needs no email login.
+
+## Drafts from your PC (VictorLinux)
+
+A paired DroidCommand can hand an SMS/email **draft** to VictorSMS (pair it under Settings → Connected apps and tick *Drafts*, separate from *Send*). VictorSMS shows recipients, the sending identity you choose and the contents. **Only your Send button submits it**; Decline sends nothing; a repeated hand-off of the same draft only shows its current state.
+
+## MMS
+
+VictorSMS now parses the MMS WAP push and starts the carrier download (`SmsManager.downloadMultimediaMessage`), keeping the raw PDU. **Not implemented:** decoding/displaying MMS content and sending MMS. Needs a SIM with MMS service to verify.
+
+## Your own SIP/VoIP (in progress)
+
+Server: `VictorLinux/voip` (`victor-voip`), see its README. Phone: VictorSMS can parse the provisioning JSON that `victor-voip add-device` prints (TLS + required SRTP + pinned server certificate only; anything weaker is refused). The Linphone-based call engine is an **uncompiled draft** behind `-PwithLinphone=true`, and Telecom integration (`SipConnectionService`, own phone account) and a Settings → SIP / VoIP screen now exist but are **untested on a device**; with no Linphone build calls fail with a clear message. Linphone is GPLv3: enabling it requires relicensing VictorSMS (you chose this) and conflicts with the proprietary Twilio Voice SDK already linked, which needs a decision before release.
