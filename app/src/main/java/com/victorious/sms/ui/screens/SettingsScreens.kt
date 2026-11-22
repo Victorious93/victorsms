@@ -1,5 +1,12 @@
 package com.victorious.sms.ui.screens
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.material3.Button
+import androidx.compose.runtime.collectAsState
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -106,6 +113,32 @@ fun ConnectedAppsScreen(onBack: () -> Unit) {
                     }
                     TextButton(onClick = { registry.forget(a); apps = registry.all() }) { Text("Forget", color = Magenta) }
                 }
+            }
+        }
+    }
+}
+
+/** Own SIP server: paste the provisioning JSON printed by `victor-voip add-device`. Strictly TLS + SRTP + pinned certificate. */
+@androidx.compose.runtime.Composable
+fun SipSettingsScreen(onBack: () -> Unit) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val store = androidx.compose.runtime.remember { com.victorious.sms.voip.SipStore(ctx) }
+    var text by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
+    var msg by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
+    var cfg by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(store.load()) }
+    val status by com.victorious.sms.voip.SipCalls.status.collectAsState()
+    Page("SIP / VoIP", actions = { TextButton(onClick = onBack) { Text("Back", color = Cyan) } }) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("Calls over your own server (victor-voip). Only TLS with required SRTP and a pinned server certificate is accepted.", color = MaterialTheme.colorScheme.onBackground)
+            cfg?.let { Text("Account ${it.username} @ ${it.domain}:${it.port}\nStatus: $status", color = Cyan) }
+            if (!com.victorious.sms.voip.SipCalls.engineAvailable) Text("This build has no VoIP engine (Linphone build required), so calls cannot be placed yet.", color = Magenta)
+            OutlinedTextField(text, { text = it }, label = { Text("Provisioning JSON") }, minLines = 5, modifier = Modifier.fillMaxWidth())
+            msg?.let { Text(it, color = Magenta) }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(enabled = text.isNotBlank(), onClick = {
+                    store.save(text).onSuccess { cfg = it; text = ""; msg = null; com.victorious.sms.phone.SipConnectionService.register(ctx); com.victorious.sms.voip.SipCalls.start(ctx) }.onFailure { msg = "Refused: ${it.message}" }
+                }) { Text("Save and register") }
+                if (cfg != null) OutlinedButton(onClick = { com.victorious.sms.voip.SipCalls.stop(); store.clear(); cfg = null }) { Text("Remove", color = Magenta) }
             }
         }
     }

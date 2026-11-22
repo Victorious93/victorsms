@@ -13,3 +13,19 @@ class SipConfigTest {
             assertTrue(d, SipConfig.parse(d).isFailure)
     }
 }
+
+class SipRulesTest {
+    @org.junit.Test fun dialableAcceptsExtensionsAndE164Only() {
+        org.junit.Assert.assertEquals("1002", com.victorious.sms.voip.SipRules.dialable(" 1002 "))
+        org.junit.Assert.assertEquals("+15551234567", com.victorious.sms.voip.SipRules.dialable("+1 555-123-4567"))
+        for (bad in listOf("sip:x@evil", "1002;header=x", "1\r\nVia: x", "abc", "", "+", "1"))
+            org.junit.Assert.assertNull(bad, com.victorious.sms.voip.SipRules.dialable(bad))
+    }
+    @org.junit.Test fun engineStatesMapToPhases() {
+        val P = com.victorious.sms.voip.SipRules.Phase.entries.associateBy { it.name }
+        org.junit.Assert.assertEquals(P.getValue("ACTIVE"), com.victorious.sms.voip.SipRules.phase("StreamsRunning"))
+        org.junit.Assert.assertEquals(P.getValue("RINGING"), com.victorious.sms.voip.SipRules.phase("OutgoingRinging"))
+        org.junit.Assert.assertEquals(P.getValue("ENDED"), com.victorious.sms.voip.SipRules.phase("Released"))
+        org.junit.Assert.assertEquals(P.getValue("FAILED"), com.victorious.sms.voip.SipRules.phase("Error"))
+    }
+}

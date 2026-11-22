@@ -54,6 +54,7 @@ class MainActivity : ComponentActivity() {
                             onConnectedApps = { nav.navigate("connected_apps") },
                             onPairedPhones = { nav.navigate("paired_phones") },
                             extra = listOf(
+                                "SIP / VoIP (own server)" to { nav.navigate("sip") },
                                 "Email accounts" to { nav.navigate("mail_accounts") },
                                 "Email outbox" to { nav.navigate("mail_outbox") },
                                 "Blocking & spam" to { nav.navigate("blocking") },
@@ -110,6 +111,7 @@ class MainActivity : ComponentActivity() {
                     composable("sms_new") {
                         SmsThreadScreen(-1L, composeTo, composeBody) { nav.popBackStack() }
                     }
+                    composable("sip") { com.victorious.sms.ui.screens.SipSettingsScreen { nav.popBackStack() } }
                     composable("mail_accounts") { com.victorious.sms.ui.screens.MailAccountsScreen { nav.popBackStack() } }
                     composable("mail_outbox") { com.victorious.sms.ui.screens.MailOutboxScreen { nav.popBackStack() } }
                     composable("mail_thread/{acc}/{key}") { e ->

@@ -115,6 +115,14 @@
         </service>
         <!-- Alias calls over Twilio Voice (docs/MANUAL.md). -->
         <service
+            android:name=".phone.SipConnectionService"
+            android:exported="true"
+            android:permission="android.permission.BIND_TELECOM_CONNECTION_SERVICE">
+            <intent-filter>
+                <action android:name="android.telecom.ConnectionService" />
+            </intent-filter>
+        </service>
+        <service
             android:name=".phone.TwilioConnectionService"
             android:exported="true"
             android:permission="android.permission.BIND_TELECOM_CONNECTION_SERVICE">
