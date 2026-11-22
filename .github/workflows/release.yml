@@ -3,7 +3,7 @@
 # Gates (any failure publishes nothing):
 #   - must run on main (a release can only come from reviewed code);
 #   - the tag must look like vX.Y.Z[-suffix], must not exist yet, and must equal versionName in app/build.gradle.kts;
-#   - android.yml (PC shim tests + unit tests + assembleDebug) must have a successful run for this exact commit;
+#   - android.yml (PC shim tests + unit tests + assembleStandardDebug) must have a successful run for this exact commit;
 #   - every APK must carry package com.victorious.sms and the versionName that matches the tag.
 #
 # What it does NOT do: it does not sign with a release key (APKs are signed with the project's public debug key,
@@ -71,7 +71,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
 
       - name: Assemble debug APKs
-        run: ./gradlew assembleDebug --stacktrace
+        run: ./gradlew assembleStandardDebug --stacktrace
 
       - name: Verify APK identity
         run: |
@@ -79,7 +79,7 @@ jobs:
           AAPT2="$(ls "$ANDROID_HOME"/build-tools/*/aapt2 | sort -V | tail -n1)"
           vname="${TAG#v}"
           shopt -s nullglob
-          apks=(app/build/outputs/apk/debug/*-debug.apk)
+          apks=(app/build/outputs/apk/standard/debug/*-debug.apk)
           [ "${#apks[@]}" -ge 1 ] || { echo "::error::no debug APKs were built" >&2; exit 1; }
           for apk in "${apks[@]}"; do
             line="$("$AAPT2" dump badging "$apk" | grep '^package:')"
@@ -92,7 +92,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir dist
-          cp app/build/outputs/apk/debug/*-debug.apk dist/
+          cp app/build/outputs/apk/standard/debug/*-debug.apk dist/
           (cd dist && sha256sum *.apk > SHA256SUMS && sha256sum -c SHA256SUMS)
 
       - name: Publish GitHub pre-release
@@ -103,7 +103,7 @@ jobs:
             echo "(signed with the project's public debug key, see README)."
             echo
             echo "**Checks executed for this exact commit before publishing:**"
-            echo "- android.yml (PC shim tests, unit tests, assembleDebug): green."
+            echo "- android.yml (PC shim tests, unit tests, assembleStandardDebug): green."
             echo "- APK identity: package com.victorious.sms and versionName equal to the tag, for every APK attached."
             echo
             echo "**Not executed:** the APKs attached here were not run on any device or emulator."
