@@ -62,6 +62,9 @@ android {
 
     packaging { resources { excludes += listOf("META-INF/NOTICE*", "META-INF/LICENSE*", "META-INF/DEPENDENCIES", "META-INF/*.md", "META-INF/INDEX.LIST", "META-INF/io.netty.versions.properties") } }
 
+    // Opt-in Linphone SDK (GPLv3) VoIP engine: ./gradlew assembleDebug -PwithLinphone=true  (needs download.linphone.org/maven_repository)
+    if (project.hasProperty("withLinphone")) sourceSets.getByName("main").java.srcDir("src/linphone/java")
+
     // One APK per ABI (the Matrix Rust SDK ships large native libs for every ABI).
     splits {
         abi {
@@ -95,6 +98,7 @@ dependencies {
     // Alias calls: Twilio Voice SDK (Twilio TOS licence) + FCM for incoming-call pushes (Apache-2.0).
     implementation(libs.twilio.voice.android)
     implementation(libs.firebase.messaging)
+    if (project.hasProperty("withLinphone")) implementation("org.linphone:linphone-sdk-android:5.3.+")
     debugImplementation(libs.androidx.compose.ui.tooling)
     testImplementation("junit:junit:4.13.2")
     // Real org.json on the JVM (android.jar stubs throw in local unit tests).

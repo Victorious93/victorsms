@@ -355,3 +355,7 @@ A paired DroidCommand can hand an SMS/email **draft** to VictorSMS (pair it unde
 ## MMS
 
 VictorSMS now parses the MMS WAP push and starts the carrier download (`SmsManager.downloadMultimediaMessage`), keeping the raw PDU. **Not implemented:** decoding/displaying MMS content and sending MMS. Needs a SIM with MMS service to verify.
+
+## Your own SIP/VoIP (in progress)
+
+Server: `VictorLinux/voip` (`victor-voip`), see its README. Phone: VictorSMS can parse the provisioning JSON that `victor-voip add-device` prints (TLS + required SRTP + pinned server certificate only; anything weaker is refused). The Linphone-based call engine is an **uncompiled draft** behind `-PwithLinphone=true`, and there is **no call UI or Telecom integration yet**. Linphone is GPLv3: enabling it requires relicensing VictorSMS (you chose this) and conflicts with the proprietary Twilio Voice SDK already linked, which needs a decision before release.
