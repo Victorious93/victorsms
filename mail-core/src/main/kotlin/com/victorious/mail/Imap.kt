@@ -24,14 +24,23 @@ class ImapClient(private val account: MailAccount) {
 
     fun folders(): List<String> = withStore { st -> st.defaultFolder.list("*").filter { it.type and Folder.HOLDS_MESSAGES != 0 }.map { it.fullName } }
 
-    /** Fetch messages newer than [state] (or everything for a new/invalidated cursor). Returns the new cursor and the messages. */
+    /**
+     * Fetch messages newer than [state] (or from the start when the cursor is missing or UIDVALIDITY changed).
+     * At most [limit] messages per call, oldest UID first. The returned cursor is the highest UID actually stored,
+     * so the next sync continues at the following message. A mailbox larger than [limit] is therefore caught up
+     * over later syncs instead of jumping the cursor to the newest UID and leaving the rest unread forever.
+     */
     fun sync(folderName: String, state: SyncState?, limit: Int = 500): Pair<SyncState, List<MailMessage>> = withStore { st ->
         val f = st.getFolder(folderName) as IMAPFolder
         f.open(Folder.READ_ONLY)
         try {
             val validity = f.uidValidity
             val from = if (state != null && state.uidValidity == validity) state.lastUid + 1 else 1L
-            val msgs = f.getMessagesByUID(from, UIDFolder.LASTUID).filterNotNull().filter { f.getUID(it) >= from }.takeLast(limit)
+            val msgs = f.getMessagesByUID(from, UIDFolder.LASTUID)
+                .filterNotNull()
+                .filter { f.getUID(it) >= from }
+                .sortedBy { f.getUID(it) }
+                .take(limit)
             val out = msgs.map { toMail(f, it as MimeMessage) }
             val last = out.maxOfOrNull { it.uid } ?: (state?.takeIf { it.uidValidity == validity }?.lastUid ?: 0L)
             SyncState(account.id, folderName, validity, last) to out

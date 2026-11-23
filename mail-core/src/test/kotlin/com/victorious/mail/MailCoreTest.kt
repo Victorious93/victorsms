@@ -82,6 +82,17 @@ class MailCoreTest {
         assertEquals(listOf(png), inbox(d).single { it.subject == "Fwd: Plan" }.attachments)
     }
 
+    @Test fun aLimitedSyncDoesNotSkipMailPastTheCursor() {
+        val a = account("a", "alice@example.test"); val b = account("b", "bob@example.test")
+        repeat(3) { n -> ok(SmtpSender().send(a, draft(a, "bob@example.test", "m$n", "$n", id = "lim$n"))) }
+        val (s1, first) = ImapClient(b).sync("INBOX", null, limit = 2)
+        assertEquals(2, first.size)
+        val (s2, second) = ImapClient(b).sync("INBOX", s1, limit = 2)
+        assertEquals("the message past the page must arrive on the next sync", listOf("m2"), second.map { it.subject })
+        assertEquals(setOf("m0", "m1", "m2"), (first + second).map { it.subject }.toSet())
+        assertTrue(s2.lastUid > s1.lastUid)
+    }
+
     @Test fun incrementalSyncUsesPerAccountCursorAndReadStateRoundTrips() {
         val a = account("a", "alice@example.test"); val b = account("b", "bob@example.test")
         SmtpSender().send(a, draft(a, "bob@example.test", "one", "1")); SmtpSender().send(a, draft(a, "bob@example.test", "two", "2"))
