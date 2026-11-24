@@ -45,7 +45,7 @@ Present under `app/src/main/java/com/victorious/sms/` (do not invent beyond this
 | SMS remote trigger | `fleet/SmsRemoteTrigger.kt` | Whitelist + code word → `sms.remote_command.forward` (**forwards only; never executes**) |
 | Phone-to-phone relay | `relay/` | Paired phones, encrypted relay node, remote calls with approve UI |
 | Fleet bridge | `bridge/` | Pairing, node status, config backup, remote SMS with approve-send, replay guard, DCA wire |
-| Conversation archive / import engine | `comms-core/` (pure Kotlin) | Built and JVM-tested (58 tests). **Not wired into the app: no screen, no Android adapter, never run on a device.** Part of the Victorious Framework communications slice; see `docs/ARCHITECTURE.md` §24 |
+| Conversation archive / import | `comms-core/` + `archive/` + `ui/screens/ImportScreens.kt` | Import wizard, saved conversations, Update, Undo, conflicts, delete, share target: **built and tested (JVM, Robolectric, Compose-on-JVM); never run on a device**. Live SMS are not archived yet; automation has no caller. See `docs/ARCHITECTURE.md` §24 |
 | UI | `ui/screens/` | SMS, dialer settings, blocking, Twilio, bots, assistant, trigger, paired phones |
 
 ## Tests

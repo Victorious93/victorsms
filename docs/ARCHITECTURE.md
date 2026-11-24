@@ -503,11 +503,14 @@ and `ui/theme/Theme.kt`.
 - **Tests:** `app/src/test/.../FleetThemeCodecTest.kt` covers hex parsing, schema rejection, per-key
   fallback, and cert pin/revocation logic. Provider/receiver behaviour is not device-tested.
 
-## 24. Conversation archive, import and automation gate — `comms-core` (Victorious Framework; built and JVM-tested, not wired into the app)
+## 24. Conversation archive, import and automation gate — `comms-core` + Android glue (Victorious Framework)
 
-Added 2026-11-24. New pure Kotlin/JVM module `comms-core` (package `com.victorious.comms`, no `android.*`). **Status: BUILT, TESTED (58 JVM
-tests against real SQLite). NOT wired into `:app`: no Android `SqlDb` adapter, no import screen, no live sender. Never run on a device.**
-VictorSMS is the authoritative owner of communication history; droidcommand-AI retrieves budgeted context from it and never keeps an archive.
+Added 2026-11-24. New pure Kotlin/JVM module `comms-core` (package `com.victorious.comms`, no `android.*`). **Status: BUILT and TESTED
+(59 JVM tests against real SQLite). The import side is now wired into `:app`** (see "Android glue" below): Settings → *Saved conversations
+(import)*. **Never run on a device or emulator** (none was available; verification is JVM, Robolectric and CI compile). **Not wired: live incoming
+SMS are NOT recorded into the archive** (`SmsDeliverReceiver` is untouched), so the archive currently holds imported history only, and the
+automation gate and outbox have no caller. VictorSMS is the authoritative owner of communication history; droidcommand-AI only retrieves
+budgeted context from it.
 
 - **Schema** (`Schema.v1`, `PRAGMA user_version`; a newer database is refused): conversations, participants, messages (content fingerprint
   without timestamp, `origin` import|live, `author` owner|peer|bot_*), imports (history, hashes, counts), message_sources (per-message
@@ -529,9 +532,20 @@ VictorSMS is the authoritative owner of communication history; droidcommand-AI r
 - **Retrieval/backup/deletion**: `ContextRetriever` returns recent turns, FTS-relevant older turns, approved facts, latest summary and the
   owner's own examples under a hard character budget. Backup is AES-256-GCM with a PBKDF2-HMAC-SHA256 key; wrong passphrase or tampering changes
   nothing. Deleting a conversation removes messages, index entries and (optionally) facts, summaries and original files.
+- **Android glue** (`app/.../archive`, `ui/screens/ImportScreens.kt`): `AndroidSqlDb` adapts `SQLiteDatabase` to `SqlDb` (owns `user_version`, typed
+  writes, thread-correct nested transactions); `ArchiveRuntime` opens the single archive in app-private storage (`allowBackup` is false app-wide);
+  `ImportSession` turns the owner's choices into an `ImportRequest` (file size capped at 64 MB, read lazily off the main thread); screens: saved
+  conversations list, import wizard (preview, who-is-me, provider/account, date order, column mapping, manual conversation choice, time-shift
+  opt-in), conversation view with **Update conversation**, search (every word), import history with **Undo**, conflict resolution, and delete with
+  per-item choices. **Share target:** a shared *file* (WhatsApp "Export chat" shares `text/plain`; CSV, JSON, ZIP, XML) opens the wizard; shared
+  *text only* now opens a new SMS with that text. Nothing is read into the archive until the owner confirms the preview.
+- **Android verification actually run:** 17 tests: `AndroidArchiveTest` (9, Android's SQLite code via Robolectric native mode, API 34: import,
+  update, FTS4 search, rollback, conflicts, partial unique index, typed writes, gate/outbox, encrypted backup, deletion), `ImportSessionTest` (5),
+  `ImportScreensTest` (3, Compose rendered on the JVM). **These are not an emulator or device run.** Writing the UI tests exposed one real defect,
+  now fixed: only the checkbox, not its label, was tappable.
 - **Not at-rest encrypted**: the SQLite file is app-private storage like the rest of the app. Not built: embeddings, scheduling, voice, UI.
 - **Reverses a documented rule on purpose, but only behind owner action:** §13/§20 say remote and drafted sends are "never auto-sent".
-  `AutomationGate` can return `AutoSend` only for a rule the owner enabled for one bot in one conversation. Nothing calls it yet.
+  `AutomationGate` can return `AutoSend` only for a rule the owner enabled for one bot in one conversation. Nothing calls it yet (no live-message ingest exists).
 
 ## Milestones
 

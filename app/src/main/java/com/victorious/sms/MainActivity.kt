@@ -1,13 +1,19 @@
 package com.victorious.sms
 
+import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.victorious.sms.archive.PendingShare
 import com.victorious.sms.ui.screens.ConnectedAppsScreen
+import com.victorious.sms.ui.screens.ImportWizardScreen
+import com.victorious.sms.ui.screens.SavedConversationScreen
+import com.victorious.sms.ui.screens.SavedConversationsScreen
 import com.victorious.sms.ui.screens.HelpScreen
 import com.victorious.sms.ui.screens.SettingsScreen
 import com.victorious.sms.ui.screens.BlockingScreen
@@ -23,16 +29,23 @@ import com.victorious.sms.ui.theme.VictorSMSTheme
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // A shared FILE (WhatsApp "Export chat", a CSV from a file manager) goes to the import wizard. Shared plain TEXT with
+        // no file composes a new SMS, as in other messaging apps. Nothing is saved until the owner confirms the preview.
+        val sharedFile = handleSharedFile(intent)
         setContent {
             VictorSMSTheme {
                 val nav = rememberNavController()
                 val composeTo = intent?.getStringExtra(EXTRA_COMPOSE_TO).orEmpty()
-                val composeBody = intent?.getStringExtra(EXTRA_COMPOSE_BODY).orEmpty()
+                val composeBody = (
+                    intent?.getStringExtra(EXTRA_COMPOSE_BODY)
+                        ?: if (intent?.action == Intent.ACTION_SEND && !sharedFile) intent?.getStringExtra(Intent.EXTRA_TEXT) else null
+                    ).orEmpty()
                 NavHost(nav, startDestination = "splash") {
                     composable("splash") {
                         SplashScreen { ok ->
                             nav.navigate(if (ok) "rooms" else "login") { popUpTo("splash") { inclusive = true } }
                             if (composeTo.isNotEmpty() || composeBody.isNotEmpty()) nav.navigate("sms_new")
+                            if (sharedFile) nav.navigate("import/-1")
                         }
                     }
                     composable("login") {
@@ -57,6 +70,7 @@ class MainActivity : ComponentActivity() {
                                 "SIP / VoIP (own server)" to { nav.navigate("sip") },
                                 "Email accounts" to { nav.navigate("mail_accounts") },
                                 "Email outbox" to { nav.navigate("mail_outbox") },
+                                "Saved conversations (import)" to { nav.navigate("saved") },
                                 "Blocking & spam" to { nav.navigate("blocking") },
                                 "Spam folder" to { nav.navigate("spam") },
                                 "Caller lookup" to { nav.navigate("lookup") },
@@ -68,6 +82,25 @@ class MainActivity : ComponentActivity() {
                                 },
                             ),
                         ) { nav.popBackStack() }
+                    }
+                    composable("saved") {
+                        SavedConversationsScreen(
+                            onOpen = { nav.navigate("saved/$it") },
+                            onImport = { nav.navigate("import/-1") },
+                            onBack = { nav.popBackStack() },
+                        )
+                    }
+                    composable("saved/{id}") { e ->
+                        val cid = e.arguments?.getString("id")?.toLongOrNull() ?: -1L
+                        SavedConversationScreen(cid, onUpdate = { nav.navigate("import/$cid") }, onBack = { nav.popBackStack() })
+                    }
+                    composable("import/{target}") { e ->
+                        val target = e.arguments?.getString("target")?.toLongOrNull()?.takeIf { it >= 0 }
+                        ImportWizardScreen(
+                            targetConversation = target,
+                            onOpenConversation = { nav.navigate("saved/$it") { popUpTo("saved") } },
+                            onBack = { nav.popBackStack() },
+                        )
                     }
                     composable("blocking") { BlockingScreen { nav.popBackStack() } }
                     composable("bot/{kind}") { e ->
@@ -126,6 +159,15 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun handleSharedFile(i: Intent?): Boolean {
+        if (i?.action != Intent.ACTION_SEND) return false
+        val uri = if (Build.VERSION.SDK_INT >= 33) i.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java) else i.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
+        if (uri == null) return false
+        PendingShare.uri = uri
+        return true
     }
 
     companion object {

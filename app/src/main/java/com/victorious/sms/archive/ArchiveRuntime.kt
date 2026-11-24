@@ -30,5 +30,8 @@ object ArchiveRuntime {
         return Handle(archive, ImportEngine(archive))
     }
 
+    /** Tests only: forget the open archive so each test starts clean. */
+    internal fun resetForTests() { synchronized(this) { instance = null } }
+
     const val DB_NAME = "archive.db"
 }

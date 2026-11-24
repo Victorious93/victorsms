@@ -111,6 +111,10 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     // Android SQLite on the JVM (native mode) to verify the archive adapter; not a device.
     testImplementation("org.robolectric:robolectric:4.14.1")
+    // Compose UI tests rendered by Robolectric on the JVM (not a device).
+    testImplementation(platform(libs.androidx.compose.bom))
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
     // Real org.json on the JVM (android.jar stubs throw in local unit tests).
     testImplementation("org.json:json:20250517")
 }
