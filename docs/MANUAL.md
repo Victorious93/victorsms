@@ -359,3 +359,23 @@ VictorSMS now parses the MMS WAP push and starts the carrier download (`SmsManag
 ## Your own SIP/VoIP (in progress)
 
 Server: `VictorLinux/voip` (`victor-voip`), see its README. Phone: VictorSMS can parse the provisioning JSON that `victor-voip add-device` prints (TLS + required SRTP + pinned server certificate only; anything weaker is refused). The Linphone-based call engine is an **uncompiled draft** behind `-PwithLinphone=true`, and Telecom integration (`SipConnectionService`, own phone account) and a Settings → SIP / VoIP screen now exist but are **untested on a device**; with no Linphone build calls fail with a clear message. Linphone is GPLv3: enabling it requires relicensing VictorSMS (you chose this) and conflicts with the proprietary Twilio Voice SDK already linked, which needs a decision before release.
+
+## Conversation archive and import (developer preview — no screen yet)
+
+*Victorious Framework. Status: the engine is built and tested on a computer; **there is no screen for it in the app yet**, so you cannot import
+a conversation from the phone today. This section says what is coming and what it will and will not do.*
+
+- **What it will do:** save an exported conversation permanently, and let you add a newer export of the same chat later. New messages are added;
+  messages already saved are recognised and not duplicated; nothing you already saved is deleted just because a newer file is shorter.
+- **Supported files:** CSV, JSON, SMS Backup & Restore XML, WhatsApp "Export chat" text, pasted text with dates, and ZIPs of those. HTML is not supported.
+- **TextNow:** TextNow lets you export a conversation on Android (Menu → conversation → options → Export). Its file format is not published, so there is
+  no special TextNow reader yet. Importing a TextNow export saves *history*; it does **not** give VictorSMS access to your TextNow number and it will
+  never send from TextNow. Send a redacted sample if you want a dedicated reader.
+- **Who is "me"?** Files that do not say which side is you will ask once, then remember it for that provider and account.
+- **Before anything is saved** you will see a preview: people found, message counts, date range, how many are already saved, problems found, and any
+  suspected time-zone shift. Nothing is saved until you confirm. The original file is kept untouched; each import can be undone.
+- **Imported history never causes replies.** Old messages are never treated as new ones, so no bot answers them.
+- **Automatic replies:** off by default. A bot can only be enabled per conversation, starts in *Approval* mode, stops after a few automatic replies in a
+  row, ignores auto-responders, respects hours and hourly limits, and an emergency stop cancels everything queued. These rules exist in the engine and
+  are tested, but nothing in the app calls them yet.
+- **Backup:** the archive can be exported as an encrypted file (passphrase required; a wrong passphrase or damaged file changes nothing).

@@ -503,6 +503,36 @@ and `ui/theme/Theme.kt`.
 - **Tests:** `app/src/test/.../FleetThemeCodecTest.kt` covers hex parsing, schema rejection, per-key
   fallback, and cert pin/revocation logic. Provider/receiver behaviour is not device-tested.
 
+## 24. Conversation archive, import and automation gate — `comms-core` (Victorious Framework; built and JVM-tested, not wired into the app)
+
+Added 2026-11-24. New pure Kotlin/JVM module `comms-core` (package `com.victorious.comms`, no `android.*`). **Status: BUILT, TESTED (58 JVM
+tests against real SQLite). NOT wired into `:app`: no Android `SqlDb` adapter, no import screen, no live sender. Never run on a device.**
+VictorSMS is the authoritative owner of communication history; droidcommand-AI retrieves budgeted context from it and never keeps an archive.
+
+- **Schema** (`Schema.v1`, `PRAGMA user_version`; a newer database is refused): conversations, participants, messages (content fingerprint
+  without timestamp, `origin` import|live, `author` owner|peer|bot_*), imports (history, hashes, counts), message_sources (per-message
+  provenance), revisions, conflicts, facts (approved only are used), summaries, auto_rules, outbox, settings; FTS4 `unicode61` index.
+- **Importers** (`Importers.all`; add a format by adding one class): CSV, JSON, SMS Backup XML (XXE-hardened), WhatsApp-style chat logs, pasted
+  text, ZIP (in memory; entry and size limits). **HTML exports are unsupported. There is no TextNow-specific parser**: TextNow documents Export
+  Conversations on Android only and not its file format; supply a CSV/JSON/text export and map columns, or send us a redacted sample.
+  Ambiguous day/month order and assumed time zones are reported as warnings, never silently resolved.
+- **Incremental update** (`ImportEngine`): preview writes nothing; commit is one transaction. Matching order: stable provider id (a changed body
+  becomes an open *conflict*, never an overwrite) then content fingerprint plus time proximity, paired one-to-one so legitimate repeated texts
+  ("ok") are neither collapsed nor duplicated. Timestamp precision differences between exports are tolerated. A constant time-zone offset between
+  exports is *suggested* in the preview and applied only if the owner passes it. Messages missing from a newer export are never deleted. The
+  original file is stored content-addressed and separately. Rollback removes only messages whose sole provenance is that import.
+- **Historical import never triggers automation**: imported rows are `origin='import'`; `AutomationGate` and `Outbox.enqueueReply` both refuse them.
+- **Automation gate** (`AutomationGate`, `Outbox`): rules default to Approval mode and disabled; one active bot per conversation (unique index);
+  emergency stop; operating hours (may wrap midnight); hourly cap; minimum gap (defers); consecutive-auto-reply loop guard; flood guard; refuses
+  to answer auto-responders; disclosure once a day. The outbox is idempotent per (trigger message, bot), `markSending` is an atomic
+  compare-and-set, and a send in flight at a restart becomes `UNKNOWN` and is never resent.
+- **Retrieval/backup/deletion**: `ContextRetriever` returns recent turns, FTS-relevant older turns, approved facts, latest summary and the
+  owner's own examples under a hard character budget. Backup is AES-256-GCM with a PBKDF2-HMAC-SHA256 key; wrong passphrase or tampering changes
+  nothing. Deleting a conversation removes messages, index entries and (optionally) facts, summaries and original files.
+- **Not at-rest encrypted**: the SQLite file is app-private storage like the rest of the app. Not built: embeddings, scheduling, voice, UI.
+- **Reverses a documented rule on purpose, but only behind owner action:** §13/§20 say remote and drafted sends are "never auto-sent".
+  `AutomationGate` can return `AutoSend` only for a rule the owner enabled for one bot in one conversation. Nothing calls it yet.
+
 ## Milestones
 
 1. Scaffold (this PR): Compose shell, theme, icon, CI.
