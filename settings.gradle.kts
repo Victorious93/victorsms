@@ -11,3 +11,4 @@ dependencyResolutionManagement {
 rootProject.name = "VictorSMS"
 include(":app")
 include(":mail-core")
+include(":comms-core")

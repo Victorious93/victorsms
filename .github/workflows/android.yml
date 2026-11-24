@@ -18,7 +18,7 @@ jobs:
       - name: PC shim tests
         run: cd pc && python3 -m unittest -v test_voice_shim
       - name: Unit tests
-        run: ./gradlew :mail-core:test :app:testStandardDebugUnitTest --stacktrace
+        run: ./gradlew :mail-core:test :comms-core:test :app:testStandardDebugUnitTest --stacktrace
       - uses: actions/upload-artifact@v4
         if: always()
         with:
