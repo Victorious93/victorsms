@@ -365,7 +365,7 @@ Server: `VictorLinux/voip` (`victor-voip`), see its README. Phone: VictorSMS can
 ## Conversation archive and import (built; not yet tried on a phone)
 
 *Victorious Framework. Status: the screens and engine are built and tested on a computer (JVM, an Android-SQLite simulation and a Compose
-simulation in CI). **No one has used them on a real phone yet**; expect rough edges. Live texts you receive are **not** added to the archive yet.*
+simulation in CI). **No one has used them on a real phone yet**; expect rough edges. Saving new texts as they arrive is **off** unless you switch it on (see below).*
 
 **Import a conversation:** Settings → *Saved conversations (import)* → *Import a conversation* → choose the export file. You can also share a file
 to VictorSMS from another app (for example WhatsApp → *Export chat* → VictorSMS). You then see a **preview before anything is saved**: the people
@@ -388,6 +388,13 @@ dates, the wizard can read it (you may need to name the columns). Importing it s
 number and never sends from TextNow.
 
 **Imported history never causes replies.** Old messages are never treated as new ones. Automatic replies are not connected to anything yet.
+
+**Save new texts too (off by default):** under *Saved conversations*, switch on **Also save new texts here as they arrive and are sent**. From then on each
+text you receive or send is also copied into a saved conversation for that number. This never sends or answers anything, and the conversation is **not** visible to
+any assistant app until you switch that one conversation on. Spam you block is not copied; a text that contains your fleet code word is never copied. Texts you
+send that a bot drafted (a draft from your PC, or a remote request you approved) are kept but marked as not yours, so they never shape your writing style.
+Texts already on your phone are not copied in retroactively; import an *SMS Backup & Restore* file for older history, and it joins the same conversation without
+duplicates. Be aware that one-time codes from banks and shops will be saved too once this is on.
 
 ### Let your assistant read a conversation (built; never tried on a phone)
 

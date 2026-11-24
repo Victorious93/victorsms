@@ -19,6 +19,12 @@
 - **Fix:** replies on the droidcommand-AI wire now include `node_id` and a structured error (`category`, `message`, `code`). droidcommand-AI's validator rejected the old shape.
 - 15 `comms-core` tests and 17 app tests; reply frames pinned in both repositories. **Never run against the real droidcommand-AI or on a device.**
 
+### Added (live recording)
+- Opt-in (off by default) recording of received and sent texts into the archive: Saved conversations → *Also save new texts here as they arrive and are sent*. Same
+  conversation as an SMS Backup import, so a later import merges. Never delays delivery; skips the fleet code word and blocked spam; bot-drafted sends are recorded as
+  bot-authored so they cannot teach the owner's style. The SMS Backup importer's provider guess is now `sms` (old `sms-backup` conversations are still found).
+- 10 `comms-core` tests and 8 app tests. **The receiver and sender hooks have never run on a device.**
+
 ### Not done (see `docs/ARCHITECTURE.md` §24)
-- Recording live SMS into the archive, sending/drafting through the connector, encrypted-backup screen,
+- Sending/drafting through the connector, encrypted-backup screen,
   provider capability model, scheduled messages, voice messages, interactive AI calls. HTML and TextNow-specific import are unsupported.
