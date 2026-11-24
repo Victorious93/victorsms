@@ -69,14 +69,9 @@ class BridgeService : Service() {
             is AuthDecision.Denied -> return err(id, d.code)
             is AuthDecision.Allowed -> d.caller
         }
+        // Status and capabilities reads: one definition shared with the authorizer, so an allowed read is always answered.
+        BridgeReads.answer(applicationContext, id, op)?.let { return it }
         return when (op) {
-            "capabilities.get" -> ok(id, JSONObject().put("ops", JSONArray().apply {
-                listOf(NodeStatusCapability.descriptor, SmsSendCapability.descriptor, SmsSendCapability.statusDescriptor, DraftCapability.deliver, DraftCapability.status,
-                    ConfigCapabilities.export, ConfigCapabilities.import, ConfigOps.statusDescriptor).forEach {
-                    put(JSONObject().put("name", it.name).put("kind", it.kind)
-                        .put("remoteAllowed", it.remoteAllowed).put("requiresConfirm", it.requiresConfirm))
-                }
-            }))
             SmsSendCapability.OP -> {
                 val r = RemoteSmsQueue.submit(
                     applicationContext, caller,
