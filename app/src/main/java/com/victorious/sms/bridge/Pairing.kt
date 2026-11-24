@@ -17,7 +17,7 @@ enum class OpGroup { READ, SEND, DRAFT, ARCHIVE_READ }
 
 /** Which group an op belongs to; null = not exposed to paired apps. */
 fun opGroupOf(op: String): OpGroup? = when (op) {
-    "capabilities.get", NodeStatusCapability.OP, "sms.list_threads", "sms.read_thread", "sms.status" -> OpGroup.READ
+    in BridgeReads.CAPABILITIES, in BridgeReads.STATUS, "sms.list_threads", "sms.read_thread" -> OpGroup.READ
     "sms.send", "sms.send.status" -> OpGroup.SEND
     DraftCapability.OP_DELIVER, DraftCapability.OP_STATUS -> OpGroup.DRAFT
     else -> if (ArchiveWire.isArchiveOp(op)) OpGroup.ARCHIVE_READ else null

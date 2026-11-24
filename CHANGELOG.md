@@ -19,6 +19,10 @@
 - **Fix:** replies on the droidcommand-AI wire now include `node_id` and a structured error (`category`, `message`, `code`). droidcommand-AI's validator rejected the old shape.
 - 15 `comms-core` tests and 17 app tests; reply frames pinned in both repositories. **Never run against the real droidcommand-AI or on a device.**
 
+### Fixed (status reads)
+- `sms.status`, `node.status.get` and `sms.capabilities.get` are now answered (they used to fall through to `not_implemented` or be refused), so droidcommand-AI's
+  *Check paired apps* no longer reports a healthy VictorSMS as having a problem. The READ permission label no longer promises thread reading, which is not built.
+
 ### Added (live recording)
 - Opt-in (off by default) recording of received and sent texts into the archive: Saved conversations → *Also save new texts here as they arrive and are sent*. Same
   conversation as an SMS Backup import, so a later import merges. Never delays delivery; skips the fleet code word and blocked spam; bot-drafted sends are recorded as

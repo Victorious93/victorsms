@@ -4,6 +4,8 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.provider.Telephony
+import org.json.JSONArray
+import org.json.JSONObject
 
 /** One domain row in a node status snapshot (STATUS_TRAY.md §2). */
 data class StatusDomain(
@@ -25,6 +27,21 @@ data class NodeStatusSnapshot(
     val domains: List<StatusDomain>,
 )
 
+/** The wire form of a snapshot. States and short fixed details only; never message text, numbers, the code word or the whitelist. */
+fun NodeStatusSnapshot.toJson(): org.json.JSONObject = org.json.JSONObject()
+    .put("nodeId", nodeId)
+    .put("packageName", packageName ?: org.json.JSONObject.NULL)
+    .put("connectionClass", connectionClass)
+    .put("updatedAtMs", updatedAtMs)
+    .put(
+        "domains",
+        org.json.JSONArray().also { arr ->
+            domains.forEach { d ->
+                arr.put(org.json.JSONObject().put("name", d.name).put("state", d.state).also { o -> d.detail?.let { o.put("detail", it) } })
+            }
+        },
+    )
+
 /** Capability descriptor advertised in capabilities.get. */
 data class CapabilityDescriptor(
     val name: String,
@@ -32,6 +49,38 @@ data class CapabilityDescriptor(
     val remoteAllowed: Boolean,
     val requiresConfirm: Boolean,
 )
+
+/**
+ * The ops that read this node's own state. The authorizer ([opGroupOf]) and the dispatcher (`BridgeService`) both use these
+ * sets, so an op cannot be allowed by one and unknown to the other. droidcommand-AI's fleet screens ask for `sms.status`
+ * and `sms.capabilities.get`; the frozen remote-control names are `node.status.get` and `capabilities.get`.
+ */
+object BridgeReads {
+    val CAPABILITIES: Set<String> = setOf("capabilities.get", "sms.capabilities.get")
+    val STATUS: Set<String> = setOf("node.status.get", "sms.status")
+
+    /** The internal reply for a status or capabilities read, or null when [op] is not one of them. Never throws for those ops. */
+    fun answer(context: Context, id: String, op: String): JSONObject? = when (op) {
+        in STATUS -> reply(id, NodeStatusProvider(context, com.victorious.sms.fleet.NodeId.get(context)).snapshot().toJson())
+        in CAPABILITIES -> reply(
+            id,
+            JSONObject().put(
+                "ops",
+                JSONArray().apply {
+                    listOf(
+                        NodeStatusCapability.descriptor, SmsSendCapability.descriptor, SmsSendCapability.statusDescriptor, DraftCapability.deliver,
+                        DraftCapability.status, ConfigCapabilities.export, ConfigCapabilities.import, ConfigOps.statusDescriptor,
+                    ).forEach {
+                        put(JSONObject().put("name", it.name).put("kind", it.kind).put("remoteAllowed", it.remoteAllowed).put("requiresConfirm", it.requiresConfirm))
+                    }
+                },
+            ),
+        )
+        else -> null
+    }
+
+    private fun reply(id: String, result: JSONObject) = JSONObject().put("id", id).put("ok", true).put("result", result)
+}
 
 object NodeStatusCapability {
     const val OP = "node.status.get"

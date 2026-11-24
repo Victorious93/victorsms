@@ -564,6 +564,13 @@ budgeted context from it, and only from conversations the owner switched on (see
   **Run here:** `comms-core` 74 tests (15 new, real SQLite; 12 deliberate mutations all caught after one test was strengthened), `:app` 125 tests (17 new:
   `ArchiveBridgeTest` 6, `DcaFramesTest` 6, 2 pairing-policy cases, 3 `ImportScreensTest`; 6 mutations all caught), `assembleStandardDebug` (three ABIs).
   **Not verified:** a real bind from droidcommand-AI, the worker-thread reply path on a device, access-log display on a real screen.
+- **Status and capabilities reads (fix, 2026-11-24e).** droidcommand-AI's *Check paired apps* and status tray ask VictorSMS for `sms.status` and
+  `sms.capabilities.get`. Before this fix `sms.status` and `node.status.get` passed authorization (group `READ`) and then fell through the dispatcher to
+  `not_implemented` (`NodeStatusProvider` was written but never called), and `sms.capabilities.get` was not authorized at all, so a correctly paired and approved
+  VictorSMS looked unhealthy. `BridgeReads` now defines these ops once and both the authorizer and the dispatcher use it, so an allowed read is always answered;
+  `NodeStatusSnapshot.toJson()` is states only (no text, numbers, code word or whitelist). Not touched: `sms.list_threads` / `sms.read_thread` are still
+  authorized and still answer `not_implemented`; the READ permission label now says so. **Tested:** `NodeStatusTest` (5, Robolectric; 4 mutations caught). The
+  service dispatcher itself is not run in a test.
 - **Live recording (opt-in; Victorious Framework, added 2026-11-24d).** Status: **Implemented, Built, Tested on the JVM and under Robolectric; NEVER RUN on a
   device, and the receiver and sender hook sites themselves have not been exercised** (they need a real telephony stack). Settings → Saved conversations → *Also save
   new texts here as they arrive and are sent*, **off by default**. When on, `SmsDeliverReceiver` (after the text is stored and the fleet trigger started),

@@ -103,7 +103,7 @@ fun ConnectedAppsScreen(onBack: () -> Unit) {
                             })
                             Text(
                                 when (g) {
-                                    OpGroup.READ -> "Read-only: status and threads"
+                                    OpGroup.READ -> "Read-only: status and capabilities (reading text threads is not available yet)"
                                     OpGroup.SEND -> "Send (each send still needs your confirmation)"
                                     OpGroup.DRAFT -> "Drafts: show drafts from your PC for your review (never sends by itself)"
                                     OpGroup.ARCHIVE_READ -> "Archive read: message text from saved conversations you switch on for the assistant (read-only)"
