@@ -396,7 +396,8 @@ class SmsBackupXmlImporter : Importer {
             errors.add(ParseError(0, "XML could not be read: ${e.message?.take(120)}"))
         }
         if (skipped > 0) warnings.add("$skipped drafts, queued, failed or unsupported entries were skipped (they were never delivered or are not conversation history).")
-        return ParseResult(id, "sms-backup", null, msgs, errors, warnings)
+        // "sms" is the service; "sms-backup" is only the file format. Live recording uses the same label so the two meet in one conversation.
+        return ParseResult(id, "sms", null, msgs, errors, warnings)
     }
 
     private fun attrs(r: XMLStreamReader): Map<String, String> =

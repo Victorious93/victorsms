@@ -17,6 +17,7 @@ import com.victorious.comms.ImportInput
 import com.victorious.comms.ImportRequest
 import com.victorious.comms.ParseOptions
 import com.victorious.sms.archive.ArchiveRuntime
+import com.victorious.sms.archive.LiveArchive
 import com.victorious.sms.archive.PendingShare
 import com.victorious.sms.ui.screens.ImportWizardScreen
 import com.victorious.sms.ui.screens.SavedConversationScreen
@@ -50,6 +51,7 @@ class ImportScreensTest {
         ctx.getDatabasePath(ArchiveRuntime.DB_NAME).delete()
         ArchiveRuntime.resetForTests()
         PendingShare.take()
+        LiveArchive.resetForTests(ctx)
     }
 
 
@@ -156,5 +158,17 @@ class ImportScreensTest {
         h.archive.setAssistantAccess(conv, true)
         rule.setContent { SavedConversationsScreen(onOpen = {}, onImport = {}, onBack = {}) }
         awaitText("shared with assistant")
+    }
+
+    @Test fun savingNewTextsIsOffUntilTheOwnerSwitchesItOnAndStaysOn() {
+        rule.setContent { SavedConversationsScreen(onOpen = {}, onImport = {}, onBack = {}) }
+        awaitText("Off. Only conversations you import are saved")
+        assertFalse(LiveArchive.isEnabled(ctx))
+        rule.onNodeWithText("Also save new texts", substring = true).performClick()
+        awaitText("On. Texts from now on are also copied")
+        assertTrue(LiveArchive.isEnabled(ctx))
+        rule.onNodeWithText("Also save new texts", substring = true).performClick()
+        awaitText("Off. Only conversations you import are saved")
+        assertFalse(LiveArchive.isEnabled(ctx))
     }
 }

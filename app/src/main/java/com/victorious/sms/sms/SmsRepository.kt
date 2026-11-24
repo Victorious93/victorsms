@@ -66,8 +66,11 @@ class SmsRepository(private val context: Context) {
         return out
     }
 
-    /** User-initiated send. Writes the message to the Sent box (required for the default app). */
-    fun send(address: String, body: String): Boolean {
+    /**
+     * Send. Writes the message to the Sent box (required for the default app) and, if the owner turned it on, to the archive.
+     * [author] says whose words these are: the owner's own, or text a bot drafted that the owner approved.
+     */
+    fun send(address: String, body: String, author: com.victorious.comms.Author): Boolean {
         if (context.checkSelfPermission(Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) return false
         return try {
             val sms = if (Build.VERSION.SDK_INT >= 31) context.getSystemService(SmsManager::class.java)
@@ -79,6 +82,7 @@ class SmsRepository(private val context: Context) {
                     put(Telephony.Sms.DATE, System.currentTimeMillis()); put(Telephony.Sms.READ, 1)
                 })
             }
+            com.victorious.sms.archive.LiveArchive.recordOutgoing(context, address, body, System.currentTimeMillis(), author)
             true
         } catch (e: Exception) { false }
     }

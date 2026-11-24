@@ -16,3 +16,6 @@ captures/
 keystore.properties
 __pycache__/
 *.pyc
+
+# Kotlin compiler session files (machine-local)
+.kotlin/

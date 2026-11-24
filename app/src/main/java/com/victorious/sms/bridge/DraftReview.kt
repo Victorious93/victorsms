@@ -70,7 +70,7 @@ object DraftReview {
     fun submit(ctx: Context, d: IncomingDraft, accountId: String?): Pair<DraftState, String?> {
         if (d.channel == "sms") {
             val repo = SmsRepository(ctx); var ok = 0
-            for (to in d.to) if (repo.send(to, d.body)) ok++
+            for (to in d.to) if (repo.send(to, d.body, com.victorious.comms.Author.BOT_APPROVED)) ok++
             return when (ok) { d.to.size -> DraftState.SUBMITTED to null; 0 -> DraftState.FAILED to "SMS could not be sent (permission or no service)"; else -> DraftState.FAILED to "only $ok of ${d.to.size} recipients were sent" }
         }
         val repo = MailRepository.get(ctx)

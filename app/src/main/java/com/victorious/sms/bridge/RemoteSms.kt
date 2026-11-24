@@ -154,6 +154,8 @@ object RemoteSmsQueue {
                     else @Suppress("DEPRECATION") SmsManager.getDefault()
                     val parts = sms.divideMessage(p.body)
                     sms.sendMultipartTextMessage(p.to, null, parts, null, null)
+                    // The text came from another app and the owner approved it: never recorded as the owner's own words.
+                    com.victorious.sms.archive.LiveArchive.recordOutgoing(context, p.to, p.body, System.currentTimeMillis(), com.victorious.comms.Author.BOT_APPROVED)
                     SendState.SENT
                 }
             } catch (e: Exception) { SendState.FAILED }

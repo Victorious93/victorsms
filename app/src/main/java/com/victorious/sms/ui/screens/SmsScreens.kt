@@ -145,7 +145,7 @@ fun SmsThreadScreen(threadId: Long, address: String, initialBody: String = "", o
                             draft = ""; mediaUrl = ""; "Sent via Twilio from your alias."
                         }
                     } else {
-                        val ok = withContext(Dispatchers.IO) { repo.send(dest, text) }
+                        val ok = withContext(Dispatchers.IO) { repo.send(dest, text, com.victorious.comms.Author.OWNER) }
                         if (ok) { draft = ""; status = null } else status = "Not sent: SMS permission missing or send failed."
                     }
                 }

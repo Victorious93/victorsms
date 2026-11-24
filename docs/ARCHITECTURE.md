@@ -507,9 +507,8 @@ and `ui/theme/Theme.kt`.
 
 Added 2026-11-24. New pure Kotlin/JVM module `comms-core` (package `com.victorious.comms`, no `android.*`). **Status: BUILT and TESTED
 (59 JVM tests against real SQLite at first; 74 with the assistant connector below). The import side is now wired into `:app`** (see "Android glue" below): Settings → *Saved conversations
-(import)*. **Never run on a device or emulator** (none was available; verification is JVM, Robolectric and CI compile). **Not wired: live incoming
-SMS are NOT recorded into the archive** (`SmsDeliverReceiver` is untouched), so the archive currently holds imported history only, and the
-automation gate and outbox have no caller. VictorSMS is the authoritative owner of communication history; droidcommand-AI only retrieves
+(import)*. **Never run on a device or emulator** (none was available; verification is JVM, Robolectric and CI compile). **Live texts are recorded only if the owner switches that on** (opt-in, off by default; see "Live recording" below); the
+automation gate and outbox still have no caller. VictorSMS is the authoritative owner of communication history; droidcommand-AI only retrieves
 budgeted context from it, and only from conversations the owner switched on (see "Assistant connector").
 
 - **Schema** (`Schema.v1` + `Schema.v2`, `PRAGMA user_version`; a newer database is refused; a fresh database runs both, so the upgrade path is always exercised): conversations, participants, messages (content fingerprint
@@ -565,6 +564,27 @@ budgeted context from it, and only from conversations the owner switched on (see
   **Run here:** `comms-core` 74 tests (15 new, real SQLite; 12 deliberate mutations all caught after one test was strengthened), `:app` 125 tests (17 new:
   `ArchiveBridgeTest` 6, `DcaFramesTest` 6, 2 pairing-policy cases, 3 `ImportScreensTest`; 6 mutations all caught), `assembleStandardDebug` (three ABIs).
   **Not verified:** a real bind from droidcommand-AI, the worker-thread reply path on a device, access-log display on a real screen.
+- **Live recording (opt-in; Victorious Framework, added 2026-11-24d).** Status: **Implemented, Built, Tested on the JVM and under Robolectric; NEVER RUN on a
+  device, and the receiver and sender hook sites themselves have not been exercised** (they need a real telephony stack). Settings → Saved conversations → *Also save
+  new texts here as they arrive and are sent*, **off by default**. When on, `SmsDeliverReceiver` (after the text is stored and the fleet trigger started),
+  `SmsRepository.send` and the on-device-approved remote send call `LiveArchive`, which writes through `LiveIngest` in `comms-core`.
+  - *Same conversation as an import:* provider `sms`, no account, other party keyed by `Keys.participant(address)`, so a later SMS Backup import **merges** instead of
+    duplicating (tested: 4 recorded texts, then a backup of 7 -> 4 matched, 3 added, one conversation; recorded texts stay `live`). The SMS Backup importer's provider
+    guess changed from `sms-backup` (a file format) to `sms`; conversations already saved under the old label are still found by both live recording and new imports.
+  - *Never delays or fails delivery:* background thread, `goAsync()` held only until the write finishes, every failure swallowed.
+  - *Recording is not automation:* no rule, no outbox row, no reply; a new conversation is **not** shared with any assistant app (that is still the owner's
+    per-conversation switch, off by default). Nothing here calls `AutomationGate`, so the "never auto-sent" rule is untouched.
+  - *Secrets and spam:* a text containing the fleet code word is never recorded, in either direction; if the code word cannot be read, nothing is recorded (fail
+    closed). Spam the blocklist stops never reaches this code.
+  - *Authorship:* `SmsRepository.send` takes a mandatory `Author`. The in-app composer and the quick-reply service record `OWNER`; PC drafts the owner approved and
+    remote sends approved on the device record `BOT_APPROVED`, which can never teach the owner's writing style. The author at each call site was checked by reading,
+    not by a test. Twilio alias sends and MMS are not recorded.
+  - *Limits:* "sent" means handed to the phone's SMS sender (delivery status is not tracked, same as the system Sent box); received MMS, group texts and attachments are
+    not recorded; texts already in the phone's SMS database are not back-filled (import an SMS Backup for history); there is no de-duplication beyond what imports do.
+  - *Privacy:* once on, one-time codes and other private texts also land in the archive's SQLite file (app-private, not separately encrypted). An assistant app can read
+    only conversations you switch on, one by one.
+  - **Run here:** `LiveIngestTest` 10 (real SQLite; 8 mutations all caught), `LiveArchiveTest` 7 and the new `ImportScreensTest` switch case (Robolectric). Full suites:
+    `mail-core` 19, `comms-core` 84, `:app` 133, all passing; `assembleStandardDebug` builds three ABIs. App-layer mutation checks: 6 mutations of the hook and the switch, all caught; one ("recording on by default") survived at first because the tests forced the setting off instead of using the shipped default, and the setup now resets stored state instead.
 - **Not at-rest encrypted**: the SQLite file is app-private storage like the rest of the app. Not built: embeddings, scheduling, voice.
 - **Reverses a documented rule on purpose, but only behind owner action:** §13/§20 say remote and drafted sends are "never auto-sent".
   `AutomationGate` can return `AutoSend` only for a rule the owner enabled for one bot in one conversation. Nothing calls it yet (no live-message ingest exists).
