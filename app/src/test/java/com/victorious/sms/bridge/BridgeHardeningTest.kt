@@ -48,6 +48,30 @@ class PairingPolicyTest {
         assertFalse(r.needsUserConfirm)
     }
 
+    @Test fun archiveReadIsItsOwnGroupAndNeverImpliedByReadOrSend() {
+        val ops = com.victorious.comms.ArchiveWire.OPS
+        assertTrue(ops.all { opGroupOf(it) == OpGroup.ARCHIVE_READ })
+        assertEquals(null, opGroupOf("comms.send_everything"))
+        ops.forEach { op ->
+            assertEquals(op, AuthDecision.Denied("permission_denied"), PairingPolicy.decide(true, listOf(id), listOf(approved), op).decision)
+        }
+        val granted = approved.copy(groups = setOf(OpGroup.ARCHIVE_READ))
+        ops.forEach { op ->
+            val d = PairingPolicy.decide(true, listOf(id), listOf(granted), op).decision as AuthDecision.Allowed
+            assertFalse("a read never waits for a tap", d.needsUserConfirm)
+        }
+        // The archive group does not open anything else.
+        assertEquals(AuthDecision.Denied("permission_denied"), PairingPolicy.decide(true, listOf(id), listOf(granted), "sms.send").decision)
+        assertEquals(AuthDecision.Denied("permission_denied"), PairingPolicy.decide(true, listOf(id), listOf(granted), "sms.status").decision)
+    }
+
+    @Test fun archiveOpsStillNeedExternalControlAndAnApprovedApp() {
+        val granted = approved.copy(groups = setOf(OpGroup.ARCHIVE_READ))
+        assertEquals(AuthDecision.Denied("external_control_disabled"), PairingPolicy.decide(false, listOf(id), listOf(granted), "comms.conversation.read").decision)
+        assertEquals(AuthDecision.Denied("not_paired"), PairingPolicy.decide(true, listOf(id), listOf(granted.copy(approved = false)), "comms.conversation.read").decision)
+        assertEquals(AuthDecision.Denied("not_paired"), PairingPolicy.decide(true, listOf(CallerIdentity("evil.app", cert)), listOf(granted), "comms.conversation.read").decision)
+    }
+
     @Test fun certFormatNormalized() =
         assertTrue(PairingPolicy.matches(approved, CallerIdentity("ai.droidcommand.app", "aabbcc")))
 }

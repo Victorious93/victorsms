@@ -5,17 +5,22 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import com.victorious.comms.ArchiveWire
 import java.security.MessageDigest
 
-/** Op groups a paired app may be granted. Nothing is granted by default. */
-enum class OpGroup { READ, SEND, DRAFT }   // DRAFT (desktop drafts for owner review) is granted separately from SEND
+/**
+ * Op groups a paired app may be granted. Nothing is granted by default.
+ * DRAFT (desktop drafts for owner review) is granted separately from SEND. ARCHIVE_READ lets an app read the saved
+ * conversations the owner switched on for the assistant; it is separate from READ because message text crosses the bridge.
+ */
+enum class OpGroup { READ, SEND, DRAFT, ARCHIVE_READ }
 
 /** Which group an op belongs to; null = not exposed to paired apps. */
 fun opGroupOf(op: String): OpGroup? = when (op) {
     "capabilities.get", NodeStatusCapability.OP, "sms.list_threads", "sms.read_thread", "sms.status" -> OpGroup.READ
     "sms.send", "sms.send.status" -> OpGroup.SEND
     DraftCapability.OP_DELIVER, DraftCapability.OP_STATUS -> OpGroup.DRAFT
-    else -> null
+    else -> if (ArchiveWire.isArchiveOp(op)) OpGroup.ARCHIVE_READ else null
 }
 
 /** Identity of a caller, derived from the system (never from the payload). */

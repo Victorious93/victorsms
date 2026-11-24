@@ -10,15 +10,22 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.printToString
 import androidx.test.core.app.ApplicationProvider
+import com.victorious.comms.ArchiveOps
+import com.victorious.comms.ArchiveReply
+import com.victorious.comms.ArchiveWire
 import com.victorious.comms.ImportInput
 import com.victorious.comms.ImportRequest
 import com.victorious.comms.ParseOptions
 import com.victorious.sms.archive.ArchiveRuntime
 import com.victorious.sms.archive.PendingShare
 import com.victorious.sms.ui.screens.ImportWizardScreen
+import com.victorious.sms.ui.screens.SavedConversationScreen
 import com.victorious.sms.ui.screens.SavedConversationsScreen
 import org.junit.After
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -104,5 +111,50 @@ class ImportScreensTest {
         awaitText("2 added, 3 already saved")
         assertEquals(listOf("one", "two", "three", "four", "five"), h.archive.messages(conv, 20).map { it.body })
         assertEquals("still one conversation", 1, h.archive.conversations().size)
+    }
+
+    private fun seeded(): Long {
+        val first = ImportInput("first.csv", "Date,Sender,Body\n2026-01-05 12:00:00,Sam,one\n2026-01-05 12:01:00,Don,two\n".toByteArray())
+        return ArchiveRuntime.get(ctx).engine.commit(ImportRequest(first, providerLabel = "TextNow", selfSenders = setOf("Don"), options = ParseOptions(zone = ZoneOffset.systemDefault()))).groups[0].conversation
+    }
+
+    @Test fun theAssistantSwitchIsOffUntilTheOwnerTurnsItOnAndTheArchiveOpsFollowIt() {
+        val h = ArchiveRuntime.get(ctx)
+        val conv = seeded()
+        val ops = ArchiveOps(h.archive)
+        fun listed() = (ops.call("ai.droidcommand.app", ArchiveWire.LIST, buildJsonObject { }) as ArchiveReply.Ok).result["count"].toString()
+        rule.setContent { SavedConversationScreen(id = conv, onUpdate = {}, onBack = {}) }
+        awaitText("Off. No app can see")
+        assertFalse(h.archive.conversation(conv)!!.assistantAccess)
+        assertEquals("0", listed())
+
+        rule.onNodeWithText("Let my assistant", substring = true).performScrollTo().performClick()
+        awaitText("On. An app can read this")
+        assertTrue(h.archive.conversation(conv)!!.assistantAccess)
+        assertEquals("1", listed())
+
+        rule.onNodeWithText("Let my assistant", substring = true).performScrollTo().performClick()
+        awaitText("Off. No app can see")
+        assertFalse(h.archive.conversation(conv)!!.assistantAccess)
+        assertEquals("0", listed())
+    }
+
+    @Test fun theOwnerSeesWhichAppAskedAboutAConversationButNotWhatItRead() {
+        val h = ArchiveRuntime.get(ctx)
+        val conv = seeded()
+        h.archive.setAssistantAccess(conv, true)
+        val uid = h.archive.conversation(conv)!!.uid
+        ArchiveOps(h.archive).call("ai.droidcommand.app", ArchiveWire.READ, buildJsonObject { put("conversation", uid) })
+        rule.setContent { SavedConversationScreen(id = conv, onUpdate = {}, onBack = {}) }
+        awaitText("ai.droidcommand.app")
+        awaitText("2 items")
+    }
+
+    @Test fun theListMarksConversationsSharedWithTheAssistant() {
+        val h = ArchiveRuntime.get(ctx)
+        val conv = seeded()
+        h.archive.setAssistantAccess(conv, true)
+        rule.setContent { SavedConversationsScreen(onOpen = {}, onImport = {}, onBack = {}) }
+        awaitText("shared with assistant")
     }
 }

@@ -14,14 +14,31 @@ package com.victorious.comms
  *    unapproved bot text.
  */
 object Schema {
-    const val VERSION = 1
+    const val VERSION = 2
 
     fun migrate(db: SqlDb) {
         val current = db.one("PRAGMA user_version")?.get("user_version")?.toIntOrNull() ?: 0
         require(current <= VERSION) { "Archive schema $current is newer than this build supports ($VERSION)." }
         if (current < 1) db.tx { v1().forEach(db::exec) }
+        if (current < 2) db.tx { v2().forEach(db::exec) }
         db.exec("PRAGMA user_version = $VERSION")
     }
+
+    /**
+     * v2: the assistant connector. `assistant_access` is the owner's per-conversation switch and is OFF for every
+     * existing and every new conversation. `access_log` records *that* a paired app read something (never what).
+     */
+    fun v2(): List<String> = listOf(
+        "ALTER TABLE conversations ADD COLUMN assistant_access INTEGER NOT NULL DEFAULT 0",
+        """CREATE TABLE access_log(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts INTEGER NOT NULL,
+            caller TEXT NOT NULL,
+            op TEXT NOT NULL,
+            conversation TEXT NOT NULL DEFAULT '',
+            returned INTEGER NOT NULL DEFAULT 0,
+            outcome TEXT NOT NULL)""",
+    )
 
     fun v1(): List<String> = listOf(
         """CREATE TABLE conversations(

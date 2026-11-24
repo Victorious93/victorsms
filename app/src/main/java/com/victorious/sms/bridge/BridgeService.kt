@@ -9,8 +9,11 @@ import android.os.Looper
 import android.os.Message
 import android.os.Messenger
 import android.os.RemoteException
+import com.victorious.comms.ArchiveWire
+import com.victorious.sms.archive.ArchiveRuntime
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.concurrent.Executors
 
 /**
  * EXTERNAL_NODE Messenger bridge. Request: Message.data "frame" = one JSON object
@@ -20,34 +23,43 @@ import org.json.JSONObject
 class BridgeService : Service() {
     private lateinit var authorizer: BridgeAuthorizer
 
+    /** Archive reads touch SQLite and can take a moment; they run here so the main thread is never blocked. */
+    private val worker = Executors.newSingleThreadExecutor { r -> Thread(r, "bridge-archive").apply { isDaemon = true } }
+
     private val handler = object : Handler(Looper.getMainLooper()) {
         override fun handleMessage(msg: Message) {
             // DCA wire (MessengerWire): what=1, Bundle "request" = snake_case BridgeRequest;
             // reply what=2, Bundle "response". Legacy: Bundle "frame" with {"id","op","params"}.
-            val dca = msg.data?.containsKey(DcaWire.KEY_REQUEST) == true
-            val out = if (dca) {
-                val req = runCatching { JSONObject(msg.data.getString(DcaWire.KEY_REQUEST).orEmpty()) }.getOrNull()
-                val legacy = JSONObject()
-                    .put("protocol_major", req?.optInt("protocol_major", -1) ?: -1)
-                    .put("id", req?.optString("request_id").orEmpty())
-                    .put("op", req?.optString("operation").orEmpty())
-                    .put("params", (req?.optJSONObject("parameters") ?: JSONObject()).also {
-                        if (!it.has("requestId")) it.put("requestId", req?.optString("request_id").orEmpty())
+            // Read the OS-stamped sender here, on the handler thread; a later thread must not ask again.
+            val uid = msg.sendingUid
+            val replyTo = msg.replyTo
+            if (msg.data?.containsKey(DcaWire.KEY_REQUEST) == true) {
+                val req = DcaFrames.parseRequest(msg.data.getString(DcaWire.KEY_REQUEST))
+                process(uid, req.legacy.toString()) { r ->
+                    send(replyTo, Message.obtain(null, DcaWire.WHAT_RESPONSE).apply {
+                        data = Bundle().apply { putString(DcaWire.KEY_RESPONSE, DcaFrames.response(req, r).toString()) }
                     })
-                val r = handle(msg.sendingUid, legacy.toString())
-                val resp = JSONObject().put("protocol_major", 1).put("request_id", r.optString("id")).put("ok", r.optBoolean("ok"))
-                if (r.has("result")) resp.put("result", r.get("result"))
-                if (r.has("error")) resp.put("error", JSONObject().put("code", r.optString("error")))
-                Message.obtain(null, DcaWire.WHAT_RESPONSE).apply { data = Bundle().apply { putString(DcaWire.KEY_RESPONSE, resp.toString()) } }
+                }
             } else {
-                val reply = handle(msg.sendingUid, msg.data?.getString("frame").orEmpty())
-                Message.obtain(null, msg.what).apply { data = Bundle().apply { putString("frame", reply.toString()) } }
+                val what = msg.what
+                process(uid, msg.data?.getString("frame").orEmpty()) { r ->
+                    send(replyTo, Message.obtain(null, what).apply { data = Bundle().apply { putString("frame", r.toString()) } })
+                }
             }
-            try { msg.replyTo?.send(out) } catch (_: RemoteException) {}
         }
     }
 
-    private fun handle(uid: Int, frame: String): JSONObject {
+    private fun send(to: Messenger?, reply: Message) {
+        try { to?.send(reply) } catch (_: RemoteException) {}
+    }
+
+    /** Answers through [deliver], on this thread for every op except the archive reads, which answer from [worker]. */
+    private fun process(uid: Int, frame: String, deliver: (JSONObject) -> Unit) {
+        handle(uid, frame, deliver)?.let(deliver)
+    }
+
+    /** Null means [deliver] will be called later from another thread. */
+    private fun handle(uid: Int, frame: String, deliver: (JSONObject) -> Unit): JSONObject? {
         val req = runCatching { JSONObject(frame) }.getOrNull() ?: return err("", "invalid_frame")
         val id = req.optString("id").take(64)
         if (req.optInt("protocol_major", -1) != 1) return err(id, "unsupported_protocol")
@@ -126,6 +138,16 @@ class BridgeService : Service() {
                 val st = ConfigOps.status(caller.packageName, params.optString("importId")) ?: return err(id, "not_found")
                 ok(id, JSONObject().put("importId", params.optString("importId")).put("status", st.name.lowercase()))
             }
+            ArchiveWire.CAPABILITIES, ArchiveWire.LIST, ArchiveWire.READ, ArchiveWire.SEARCH, ArchiveWire.CONTEXT -> {
+                // Opened inside the worker: the first call creates and migrates the database.
+                worker.execute {
+                    deliver(
+                        try { ArchiveBridge.reply(ArchiveRuntime.get(applicationContext).archive, id, caller.packageName, op, params) }
+                        catch (_: Exception) { err(id, "internal_error") },
+                    )
+                }
+                null
+            }
             else -> err(id, "not_implemented")
         }
     }
@@ -134,5 +156,6 @@ class BridgeService : Service() {
     private fun err(id: String, code: String) = JSONObject().put("id", id).put("ok", false).put("error", code)
 
     override fun onCreate() { super.onCreate(); authorizer = BridgeAuthorizer(this); ReplayGuard.ensureLoaded(this) }
+    override fun onDestroy() { worker.shutdown(); super.onDestroy() }
     override fun onBind(intent: Intent): IBinder = Messenger(handler).binder
 }

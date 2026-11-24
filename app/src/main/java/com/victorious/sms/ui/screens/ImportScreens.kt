@@ -23,6 +23,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -97,7 +98,7 @@ fun SavedConversationsScreen(onOpen: (Long) -> Unit, onImport: () -> Unit, onBac
                 items(list, key = { it.id }) { c ->
                     Column(Modifier.fillMaxWidth().clickable { onOpen(c.id) }.padding(vertical = 8.dp)) {
                         Text(c.title.ifBlank { "Conversation" }, color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.Bold)
-                        ImportNote("${c.provider} · ${c.messageCount} messages · last ${stamp(c.lastTs)}", Magenta)
+                        ImportNote("${c.provider} · ${c.messageCount} messages · last ${stamp(c.lastTs)}${if (c.assistantAccess) " · shared with assistant" else ""}", Magenta)
                     }
                 }
             }
@@ -279,6 +280,8 @@ fun ImportWizardScreen(targetConversation: Long?, onOpenConversation: (Long) -> 
 private class Detail(
     val conv: ConversationSummary?, val recent: List<StoredMessage>, val history: List<ImportRecord>,
     val conflicts: List<Pair<Row, StoredMessage?>>,
+    /** Newest requests from paired assistant apps about this conversation: who and when, never what was read. */
+    val access: List<Row> = emptyList(),
 )
 
 @Composable
@@ -299,7 +302,12 @@ fun SavedConversationScreen(id: Long, onUpdate: () -> Unit, onBack: () -> Unit) 
 
     LaunchedEffect(rev) {
         detail = withContext(Dispatchers.IO) {
-            Detail(h.archive.conversation(id), h.archive.messages(id, 40), h.engine.history(id), h.archive.openConflicts(id).map { it to it["message"]?.toLongOrNull()?.let(h.archive::message) })
+            val conv = h.archive.conversation(id)
+            Detail(
+                conv, h.archive.messages(id, 40), h.engine.history(id),
+                h.archive.openConflicts(id).map { it to it["message"]?.toLongOrNull()?.let(h.archive::message) },
+                conv?.let { c -> h.archive.recentAccess(300).filter { it["conversation"] == c.uid }.take(5) }.orEmpty(),
+            )
         }
     }
     LaunchedEffect(query, rev) {
@@ -318,6 +326,27 @@ fun SavedConversationScreen(id: Long, onUpdate: () -> Unit, onBack: () -> Unit) 
             OutlinedButton(onClick = { confirmDelete = true }) { Text("Delete…") }
         }
         note?.let { ImportNote(it, Cyan) }
+
+        ImportNote("Assistant access", Cyan)
+        Row(
+            Modifier.fillMaxWidth().clickable {
+                scope.launch { withContext(Dispatchers.IO) { h.archive.setAssistantAccess(id, !c.assistantAccess) }; rev++ }
+            },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Switch(c.assistantAccess, null)
+            Text(
+                "Let my assistant (droidcommand-AI) read this conversation",
+                color = MaterialTheme.colorScheme.onBackground, modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 8.dp),
+            )
+        }
+        ImportNote(
+            if (c.assistantAccess) "On. An app can read this only if you approved it and granted it \"Archive read\" under Connected apps. Switch it off to stop at once."
+            else "Off. No app can see that this conversation exists. Turning it on never sends anything anywhere by itself.",
+        )
+        d.access.forEach { r ->
+            ImportNote("${r["caller"].orEmpty()} · ${r["op"].orEmpty().substringAfterLast('.')} · ${stamp(r["ts"]?.toLongOrNull())} · ${r["outcome"].orEmpty()}${r["returned"]?.takeIf { it != "0" }?.let { " · $it items" } ?: ""}", Magenta)
+        }
 
         OutlinedTextField(query, { query = it }, label = { Text("Search this conversation") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
         val shown = found ?: d.recent

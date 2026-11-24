@@ -506,13 +506,13 @@ and `ui/theme/Theme.kt`.
 ## 24. Conversation archive, import and automation gate — `comms-core` + Android glue (Victorious Framework)
 
 Added 2026-11-24. New pure Kotlin/JVM module `comms-core` (package `com.victorious.comms`, no `android.*`). **Status: BUILT and TESTED
-(59 JVM tests against real SQLite). The import side is now wired into `:app`** (see "Android glue" below): Settings → *Saved conversations
+(59 JVM tests against real SQLite at first; 74 with the assistant connector below). The import side is now wired into `:app`** (see "Android glue" below): Settings → *Saved conversations
 (import)*. **Never run on a device or emulator** (none was available; verification is JVM, Robolectric and CI compile). **Not wired: live incoming
 SMS are NOT recorded into the archive** (`SmsDeliverReceiver` is untouched), so the archive currently holds imported history only, and the
 automation gate and outbox have no caller. VictorSMS is the authoritative owner of communication history; droidcommand-AI only retrieves
-budgeted context from it.
+budgeted context from it, and only from conversations the owner switched on (see "Assistant connector").
 
-- **Schema** (`Schema.v1`, `PRAGMA user_version`; a newer database is refused): conversations, participants, messages (content fingerprint
+- **Schema** (`Schema.v1` + `Schema.v2`, `PRAGMA user_version`; a newer database is refused; a fresh database runs both, so the upgrade path is always exercised): conversations, participants, messages (content fingerprint
   without timestamp, `origin` import|live, `author` owner|peer|bot_*), imports (history, hashes, counts), message_sources (per-message
   provenance), revisions, conflicts, facts (approved only are used), summaries, auto_rules, outbox, settings; FTS4 `unicode61` index.
 - **Importers** (`Importers.all`; add a format by adding one class): CSV, JSON, SMS Backup XML (XXE-hardened), WhatsApp-style chat logs, pasted
@@ -543,7 +543,29 @@ budgeted context from it.
   update, FTS4 search, rollback, conflicts, partial unique index, typed writes, gate/outbox, encrypted backup, deletion), `ImportSessionTest` (5),
   `ImportScreensTest` (3, Compose rendered on the JVM). **These are not an emulator or device run.** Writing the UI tests exposed one real defect,
   now fixed: only the checkbox, not its label, was tappable.
-- **Not at-rest encrypted**: the SQLite file is app-private storage like the rest of the app. Not built: embeddings, scheduling, voice, UI.
+- **Assistant connector (read-only, schema v2; Victorious Framework, added 2026-11-24c).** Status: **Implemented, Built, Tested (JVM + Robolectric); NEVER RUN on a
+  device or against the real droidcommand-AI.** droidcommand-AI can ask this app for saved-conversation text over the existing EXTERNAL_NODE Messenger bridge.
+  Two gates, both the owner's, both off by default:
+  1. **Op group `ARCHIVE_READ`** (`OpGroup`, granted per app under Settings → Connected apps, behind External control and app approval). It is separate from
+     `READ` because message text crosses the bridge. It opens only the five ops below; it does not open `sms.send` or anything else.
+  2. **Per-conversation switch** `conversations.assistant_access` (default 0 for every existing and new conversation; an upgrade and a restore of an older backup
+     leave everything off): *Let my assistant (droidcommand-AI) read this conversation* on the conversation screen. A conversation that is not switched on answers
+     exactly like one that does not exist (`not_found`), so existence cannot be probed.
+  Ops (`ArchiveWire`/`ArchiveOps` in `comms-core`, strict parameters): `comms.capabilities`, `comms.conversations.list`, `comms.conversation.read` (cursor paging that never
+  splits a run of one timestamp), `comms.messages.search` (every word, then any word, reported as `match`), `comms.context.retrieve` (the same `ContextRetriever`
+  budget used for replies). Limits: 200 rows, 4,000 characters per body (clipped, flagged), 45,000 serialized characters of messages per answer (the other side
+  refuses over 60,000). No phone number or account is returned in a list. Nothing writes, sends or deletes.
+  **Transparency:** every request except `comms.capabilities` writes one `access_log` row (app, operation, conversation id, count, outcome, time; never text). The
+  conversation screen shows the latest five; the log keeps 500 rows, is not backed up, and is removed with the conversation. The conversation list marks shared ones.
+  **Threading:** archive ops run on a single worker thread and answer asynchronously; every other op still answers on the main thread as before.
+  **Wire fix (`DcaFrames`):** replies on the droidcommand-AI wire now carry `node_id` (an echo of the request's `target_node_id`, for correlation only, **not** an
+  identity proof: identity is `Message.sendingUid` -> package + signing certificate) and errors as `{category, message, code}`. Before this, that app's strict
+  validator rejected every VictorSMS reply (missing `node_id`; undecodable error body), so the existing `sms.send` path could not have validated either. The reply
+  frames are pinned as literal copies in `ArchiveBridgeTest`/`DcaFramesTest` and in droidcommand-AI's `VictorSmsFramesContractTest`; change one, copy to the other.
+  **Run here:** `comms-core` 74 tests (15 new, real SQLite; 12 deliberate mutations all caught after one test was strengthened), `:app` 125 tests (17 new:
+  `ArchiveBridgeTest` 6, `DcaFramesTest` 6, 2 pairing-policy cases, 3 `ImportScreensTest`; 6 mutations all caught), `assembleStandardDebug` (three ABIs).
+  **Not verified:** a real bind from droidcommand-AI, the worker-thread reply path on a device, access-log display on a real screen.
+- **Not at-rest encrypted**: the SQLite file is app-private storage like the rest of the app. Not built: embeddings, scheduling, voice.
 - **Reverses a documented rule on purpose, but only behind owner action:** §13/§20 say remote and drafted sends are "never auto-sent".
   `AutomationGate` can return `AutoSend` only for a rule the owner enabled for one bot in one conversation. Nothing calls it yet (no live-message ingest exists).
 
