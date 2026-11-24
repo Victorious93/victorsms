@@ -584,7 +584,7 @@ budgeted context from it, and only from conversations the owner switched on (see
   - *Privacy:* once on, one-time codes and other private texts also land in the archive's SQLite file (app-private, not separately encrypted). An assistant app can read
     only conversations you switch on, one by one.
   - **Run here:** `LiveIngestTest` 10 (real SQLite; 8 mutations all caught), `LiveArchiveTest` 7 and the new `ImportScreensTest` switch case (Robolectric). Full suites:
-    `mail-core` 19, `comms-core` 84, `:app` 133, all passing; `assembleStandardDebug` builds three ABIs. App-layer mutation checks (6 mutations of the hook and switch) were still running when this was written; their result is recorded in the pull request.
+    `mail-core` 19, `comms-core` 84, `:app` 133, all passing; `assembleStandardDebug` builds three ABIs. App-layer mutation checks: 6 mutations of the hook and the switch, all caught; one ("recording on by default") survived at first because the tests forced the setting off instead of using the shipped default, and the setup now resets stored state instead.
 - **Not at-rest encrypted**: the SQLite file is app-private storage like the rest of the app. Not built: embeddings, scheduling, voice.
 - **Reverses a documented rule on purpose, but only behind owner action:** §13/§20 say remote and drafted sends are "never auto-sent".
   `AutomationGate` can return `AutoSend` only for a rule the owner enabled for one bot in one conversation. Nothing calls it yet (no live-message ingest exists).

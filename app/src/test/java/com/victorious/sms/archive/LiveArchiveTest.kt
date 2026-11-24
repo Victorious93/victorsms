@@ -29,7 +29,7 @@ class LiveArchiveTest {
     @Before fun fresh() {
         ctx.getDatabasePath(ArchiveRuntime.DB_NAME).delete()
         ArchiveRuntime.resetForTests()
-        LiveArchive.setEnabled(ctx, false)
+        LiveArchive.resetForTests(ctx) // the shipped default, not a value the test chose
         LiveArchive.executor = Executor { it.run() } // run inline so the test can look straight away
     }
 

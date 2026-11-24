@@ -51,7 +51,7 @@ class ImportScreensTest {
         ctx.getDatabasePath(ArchiveRuntime.DB_NAME).delete()
         ArchiveRuntime.resetForTests()
         PendingShare.take()
-        LiveArchive.setEnabled(ctx, false)
+        LiveArchive.resetForTests(ctx)
     }
 
 
