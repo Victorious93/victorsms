@@ -160,9 +160,12 @@ class Archive(
         return db.rows(sql, limit).map(::stored).reversed()
     }
 
-    /** Full-text search over message bodies. Tokens are quoted, so user text cannot inject FTS operators. */
-    fun search(query: String, conversation: Long? = null, limit: Int = 25): List<StoredMessage> {
-        val match = ftsQuery(query) ?: return emptyList()
+    /**
+     * Full-text search over message bodies. Tokens are quoted, so user text cannot inject FTS operators.
+     * Default is "any word" (best for retrieving context); a search box passes [matchAll] so every word must appear.
+     */
+    fun search(query: String, conversation: Long? = null, limit: Int = 25, matchAll: Boolean = false): List<StoredMessage> {
+        val match = ftsQuery(query, matchAll) ?: return emptyList()
         val rows = if (conversation == null)
             db.rows("$msgSelect JOIN message_fts ON message_fts.rowid=m.id WHERE message_fts MATCH ? ORDER BY m.ts DESC LIMIT ?", match, limit)
         else
@@ -351,9 +354,9 @@ class Archive(
         private val MAGIC = "VSMSBK1\u0000".toByteArray(Charsets.ISO_8859_1)
 
         /** Quoted OR-query from free text; null when there is nothing searchable. Unicode letters and digits only. */
-        fun ftsQuery(text: String): String? {
+        fun ftsQuery(text: String, matchAll: Boolean = false): String? {
             val tokens = Regex("[\\p{L}\\p{N}]{2,}").findAll(text).map { it.value }.distinct().take(12).toList()
-            return tokens.takeIf { it.isNotEmpty() }?.joinToString(" OR ") { "\"${it.replace("\"", "\"\"")}\"" }
+            return tokens.takeIf { it.isNotEmpty() }?.joinToString(if (matchAll) " " else " OR ") { "\"${it.replace("\"", "\"\"")}\"" }
         }
     }
 }

@@ -59,6 +59,7 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     buildFeatures { compose = true }
+    testOptions { unitTests { isIncludeAndroidResources = true } }
 
     packaging { resources { excludes += listOf("META-INF/NOTICE*", "META-INF/LICENSE*", "META-INF/DEPENDENCIES", "META-INF/*.md", "META-INF/INDEX.LIST", "META-INF/io.netty.versions.properties") } }
 
@@ -98,6 +99,7 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.matrix.sdk.android)
     implementation(project(":mail-core"))   // IMAP/SMTP, outbox, sanitiser (Angus Mail, jsoup)
+    implementation(project(":comms-core"))  // conversation archive, import engine, automation gate (pure Kotlin)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.security.crypto)
     implementation(libs.kotlinx.coroutines.android)
@@ -107,6 +109,8 @@ dependencies {
     "voipImplementation"("org.linphone:linphone-sdk-android:5.3.+")   // GPLv3; repo: download.linphone.org/maven_repository
     debugImplementation(libs.androidx.compose.ui.tooling)
     testImplementation("junit:junit:4.13.2")
+    // Android SQLite on the JVM (native mode) to verify the archive adapter; not a device.
+    testImplementation("org.robolectric:robolectric:4.14.1")
     // Real org.json on the JVM (android.jar stubs throw in local unit tests).
     testImplementation("org.json:json:20250517")
 }

@@ -107,6 +107,18 @@ class ArchiveTest {
         assertTrue(a.participants(conv).none { it["key"] == "n:sam smith" })
     }
 
+    @Test fun aSearchBoxCanRequireEveryWordWhileRetrievalKeepsAnyWord() {
+        val (a, _) = newArchive()
+        val conv = a.createConversation("textnow", "5550100100", "k", "Sam", false)
+        a.recordLive(conv, Direction.IN, "p:1", "Sam", "dinner on friday at luigi", Fx.BASE)
+        a.recordLive(conv, Direction.IN, "p:1", "Sam", "lunch on monday", Fx.BASE + 1000)
+        a.recordLive(conv, Direction.IN, "p:1", "Sam", "friday standup", Fx.BASE + 2000)
+        assertEquals("any word is the default (context recall)", 3, a.search("friday monday dinner", conv).size)
+        assertEquals("every word for a search box", 1, a.search("dinner friday", conv, matchAll = true).size)
+        assertEquals(0, a.search("dinner monday", conv, matchAll = true).size)
+        assertTrue("operators stay inert in both modes", a.search("friday\" OR \"x", conv, matchAll = true).isEmpty())
+    }
+
     @Test fun directoryOriginalStoreRefusesPathTricks() {
         val dir = java.nio.file.Files.createTempDirectory("orig").toFile()
         val s = DirOriginalStore(dir)
