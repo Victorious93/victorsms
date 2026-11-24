@@ -52,6 +52,7 @@ import com.victorious.comms.StoredMessage
 import com.victorious.sms.archive.ArchiveRuntime
 import com.victorious.sms.archive.ImportSession
 import com.victorious.sms.archive.ImportSource
+import com.victorious.sms.archive.LiveArchive
 import com.victorious.sms.archive.PendingShare
 import com.victorious.sms.ui.theme.Charcoal
 import com.victorious.sms.ui.theme.Cyan
@@ -90,6 +91,21 @@ fun SavedConversationsScreen(onOpen: (Long) -> Unit, onImport: () -> Unit, onBac
         ImportHeader("Saved conversations", onBack)
         ImportNote("Conversations you import are saved on this phone. Imported history never causes automatic replies.")
         Button(onClick = onImport, modifier = Modifier.padding(vertical = 8.dp)) { Text("Import a conversation") }
+        var recordLive by remember { mutableStateOf(LiveArchive.isEnabled(ctx)) }
+        Row(
+            Modifier.fillMaxWidth().clickable { recordLive = !recordLive; LiveArchive.setEnabled(ctx, recordLive) },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Switch(recordLive, null)
+            Text(
+                "Also save new texts here as they arrive and are sent",
+                color = MaterialTheme.colorScheme.onBackground, modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 8.dp),
+            )
+        }
+        ImportNote(
+            if (recordLive) "On. Texts from now on are also copied into these conversations (spam you block is not). Nothing is sent or answered because of this, and no assistant app sees a conversation until you switch that conversation on. A text containing your fleet code word is never saved."
+            else "Off. Only conversations you import are saved; new texts are not copied here.",
+        )
         val list = items
         when {
             list == null -> ImportNote("Loading…")

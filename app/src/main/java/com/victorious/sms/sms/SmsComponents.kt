@@ -29,6 +29,9 @@ class SmsDeliverReceiver : BroadcastReceiver() {
             put(Telephony.Sms.ADDRESS, address); put(Telephony.Sms.BODY, body)
             put(Telephony.Sms.DATE, System.currentTimeMillis()); put(Telephony.Sms.READ, if (decision == com.victorious.sms.block.BlockAction.SILENCE) 1 else 0)
         })
+        // Opt-in archive copy (off by default). Runs after delivery, off this thread; a failure here never affects delivery.
+        val hold = if (com.victorious.sms.archive.LiveArchive.isEnabled(context)) goAsync() else null
+        com.victorious.sms.archive.LiveArchive.recordIncoming(context, address, body, System.currentTimeMillis()) { hold?.finish() }
         // Fleet SMS trigger (whitelist AND code word). Never logs secrets. Off by default.
         Thread { runCatching { com.victorious.sms.fleet.SmsRemoteTrigger.maybeForward(context, address, body) } }.start()
         com.victorious.sms.relay.RelayNode.get(context).mirrorIncoming(address, body) // opt-in per peer only
@@ -42,7 +45,7 @@ class HeadlessSmsSendService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val to = intent?.data?.schemeSpecificPart?.substringBefore("?")?.let(Uri::decode)
         val body = intent?.getStringExtra(Intent.EXTRA_TEXT)
-        if (!to.isNullOrBlank() && !body.isNullOrBlank()) SmsRepository(this).send(to, body)
+        if (!to.isNullOrBlank() && !body.isNullOrBlank()) SmsRepository(this).send(to, body, com.victorious.comms.Author.OWNER)
         stopSelf(startId)
         return START_NOT_STICKY
     }

@@ -265,7 +265,7 @@ class ImportEngine(private val archive: Archive) {
             val isGroup = others.size > 1
             val title = parsed.titleGuess?.takeIf { it.isNotBlank() } ?: parts.filter { !it.value.isSelf }.values.joinToString(", ") { it.display }.ifEmpty { "Conversation" }
             val target = req.targetConversation?.also { require(archive.conversation(it) != null) { "Conversation $it does not exist." } }
-                ?: if (req.createNew) null else archive.findByMatchKey(matchKey)
+                ?: if (req.createNew) null else archive.findByMatchKey(matchKey) ?: legacySmsKey(matchKey)?.let(archive::findByMatchKey)
             plans.add(Plan(title, matchKey, isGroup, parts, resolved, target, candidates(providerNorm, account, others.toSet(), title, target), raws.size))
         }
         if (unresolved.isNotEmpty()) warnings.add("Identify which sender is you (${unresolved.take(6).joinToString()}) so messages can be marked incoming or outgoing.")
@@ -370,6 +370,9 @@ class ImportEngine(private val archive: Archive) {
         raw.split(',', '~').map { it.trim() }.filter { it.isNotEmpty() }.map { Keys.participant(it) to it }.distinctBy { it.first }
 
     private fun phoneOf(s: String): String? = s.trim().takeIf { Phones.looksLikePhone(it) }
+
+    /** Conversations saved before the SMS backup label became "sms" carry the old key; find them rather than start a second one. */
+    private fun legacySmsKey(matchKey: String): String? = if (matchKey.startsWith("sms|")) "sms-backup|" + matchKey.removePrefix("sms|") else null
 
     private fun normalizeAccount(a: String): String = a.trim().let { if (Phones.looksLikePhone(it)) Phones.suffixKey(it) ?: it else it.lowercase(Locale.ROOT) }
 
