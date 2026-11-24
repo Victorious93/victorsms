@@ -19,6 +19,8 @@ import javax.crypto.spec.SecretKeySpec
 data class ConversationSummary(
     val id: Long, val uid: String, val title: String, val provider: String, val account: String,
     val isGroup: Boolean, val messageCount: Long, val lastTs: Long?, val updated: Long,
+    /** The owner's switch for paired assistant apps (schema v2). Off unless the owner turned it on for this conversation. */
+    val assistantAccess: Boolean = false,
 )
 
 data class StoredMessage(
@@ -86,8 +88,34 @@ class Archive(
 
     private fun summary(r: Row) = ConversationSummary(
         r.long("id"), r.str("uid"), r.str("title"), r.str("provider"), r.str("account"), r.long("is_group") == 1L,
-        r.long("n"), r["last_ts"]?.toLongOrNull(), r.long("updated"),
+        r.long("n"), r["last_ts"]?.toLongOrNull(), r.long("updated"), r.long("assistant_access") == 1L,
     )
+
+    fun conversationByUid(uid: String): ConversationSummary? = db.one(
+        """SELECT c.*, (SELECT COUNT(*) FROM messages m WHERE m.conversation=c.id) AS n,
+                  (SELECT MAX(ts) FROM messages m WHERE m.conversation=c.id) AS last_ts
+           FROM conversations c WHERE c.uid=?""", uid,
+    )?.let(::summary)
+
+    // ---- assistant access (owner's per-conversation switch) ----
+
+    /** True when the conversation existed. Does not touch `updated`, so the list order does not change. */
+    fun setAssistantAccess(id: Long, enabled: Boolean): Boolean =
+        db.update("UPDATE conversations SET assistant_access=? WHERE id=?", if (enabled) 1L else 0L, id) > 0
+
+    /** Only the conversations the owner shared with paired assistant apps. */
+    fun assistantConversations(): List<ConversationSummary> = conversations().filter { it.assistantAccess }
+
+    /** Records that a paired app asked; never what was in the answer. Keeps the newest [LOG_KEEP] rows. */
+    fun logAccess(caller: String, op: String, conversationUid: String?, returned: Int, outcome: String) = db.tx {
+        db.insert(
+            "INSERT INTO access_log(ts,caller,op,conversation,returned,outcome) VALUES(?,?,?,?,?,?)",
+            clock(), caller.take(120), op.take(60), conversationUid.orEmpty(), returned.toLong(), outcome.take(60),
+        )
+        db.update("DELETE FROM access_log WHERE id <= (SELECT MAX(id) FROM access_log) - ?", LOG_KEEP.toLong())
+    }
+
+    fun recentAccess(limit: Int = 50): List<Row> = db.rows("SELECT * FROM access_log ORDER BY id DESC LIMIT ?", limit)
 
     fun participants(conversation: Long): List<Row> =
         db.rows("SELECT * FROM participants WHERE conversation=? ORDER BY id", conversation)
@@ -134,9 +162,11 @@ class Archive(
     )
 
     /** Oldest-first page ending at [beforeTs] (exclusive) when given; most recent [limit] otherwise. */
-    fun messages(conversation: Long, limit: Int = 200, beforeTs: Long? = null): List<StoredMessage> {
-        val rows = if (beforeTs == null) db.rows("$msgSelect WHERE m.conversation=? ORDER BY m.ts DESC, m.id DESC LIMIT ?", conversation, limit)
-        else db.rows("$msgSelect WHERE m.conversation=? AND m.ts<? ORDER BY m.ts DESC, m.id DESC LIMIT ?", conversation, beforeTs, limit)
+    /** The newest [limit] messages (oldest first), optionally only those before [beforeTs] and/or in one [direction]. */
+    fun messages(conversation: Long, limit: Int = 200, beforeTs: Long? = null, direction: Direction? = null): List<StoredMessage> {
+        val dir = if (direction == null) "" else " AND m.direction='${direction.db}'"
+        val rows = if (beforeTs == null) db.rows("$msgSelect WHERE m.conversation=?$dir ORDER BY m.ts DESC, m.id DESC LIMIT ?", conversation, limit)
+        else db.rows("$msgSelect WHERE m.conversation=? AND m.ts<?$dir ORDER BY m.ts DESC, m.id DESC LIMIT ?", conversation, beforeTs, limit)
         return rows.map(::stored).reversed()
     }
 
@@ -171,6 +201,16 @@ class Archive(
         else
             db.rows("$msgSelect JOIN message_fts ON message_fts.rowid=m.id WHERE message_fts MATCH ? AND m.conversation=? ORDER BY m.ts DESC LIMIT ?", match, conversation, limit)
         return rows.map(::stored)
+    }
+
+    /** Same as [search] across every conversation, but only the ones the owner shared with assistant apps. */
+    fun searchShared(query: String, limit: Int = 25, matchAll: Boolean = false): List<StoredMessage> {
+        val match = ftsQuery(query, matchAll) ?: return emptyList()
+        return db.rows(
+            "$msgSelect JOIN message_fts ON message_fts.rowid=m.id JOIN conversations c ON c.id=m.conversation " +
+                "WHERE message_fts MATCH ? AND c.assistant_access=1 ORDER BY m.ts DESC LIMIT ?",
+            match, limit,
+        ).map(::stored)
     }
 
     internal fun indexMessage(id: Long, body: String) { db.insert("INSERT INTO message_fts(rowid, body) VALUES(?,?)", id, body) }
@@ -258,6 +298,7 @@ class Archive(
 
     /** Removes one conversation. Messages, their search index, participants, rules and outbox always go with it. */
     fun deleteConversation(id: Long, deleteFacts: Boolean = true, deleteSummaries: Boolean = true, deleteOriginals: Boolean = true) = db.tx {
+        db.one("SELECT uid FROM conversations WHERE id=?", id)?.let { db.update("DELETE FROM access_log WHERE conversation=?", it.str("uid")) }
         val shas = db.rows("SELECT DISTINCT file_sha256 FROM imports WHERE conversation=?", id).map { it.str("file_sha256") }
         db.exec("DELETE FROM message_fts WHERE rowid IN (SELECT id FROM messages WHERE conversation=$id)")
         db.update("DELETE FROM message_sources WHERE message IN (SELECT id FROM messages WHERE conversation=?)", id)
@@ -287,7 +328,10 @@ class Archive(
         "conflicts", "facts", "summaries", "auto_rules", "outbox",
     )
 
-    /** AES-256-GCM, key from the passphrase with PBKDF2-HMAC-SHA256. The settings table (kill switch) is not exported. */
+    /**
+     * AES-256-GCM, key from the passphrase with PBKDF2-HMAC-SHA256. The settings table (kill switch) and the access
+     * log are not exported. `assistant_access` is part of `conversations`, so the owner's sharing choices travel.
+     */
     fun exportEncrypted(passphrase: CharArray): ByteArray {
         val root = buildJsonObject {
             put("format", "victorsms-archive")
@@ -314,8 +358,12 @@ class Archive(
         val plain = try { c.doFinal(blob, MAGIC.size + 28, blob.size - MAGIC.size - 28) } catch (e: Exception) {
             throw IllegalArgumentException("Wrong passphrase, or the backup was altered.")
         }
-        val root = Json.parseToJsonElement(String(plain, Charsets.UTF_8)) as JsonObject
-        require((root["schema"] as? JsonPrimitive)?.content?.toIntOrNull() == Schema.VERSION) { "Backup schema is not supported by this build." }
+        restoreFrom(Json.parseToJsonElement(String(plain, Charsets.UTF_8)) as JsonObject)
+    }
+
+    internal fun restoreFrom(root: JsonObject) {
+        // An older backup restores fine: columns it lacks keep their defaults (assistant_access stays OFF).
+        require((root["schema"] as? JsonPrimitive)?.content?.toIntOrNull() in 1..Schema.VERSION) { "Backup schema is not supported by this build." }
         db.tx {
             (tables.reversed()).forEach { db.exec("DELETE FROM $it") }
             db.exec("DELETE FROM message_fts")
@@ -351,6 +399,7 @@ class Archive(
     private fun newUid(): String = ByteArray(16).also { SecureRandom().nextBytes(it) }.joinToString("") { "%02x".format(it) }
 
     companion object {
+        private const val LOG_KEEP = 500
         private val MAGIC = "VSMSBK1\u0000".toByteArray(Charsets.ISO_8859_1)
 
         /** Quoted OR-query from free text; null when there is nothing searchable. Unicode letters and digits only. */

@@ -265,7 +265,9 @@ You can deny any optional permission; the related feature simply stays off.
 - **Connected apps (built):** each fleet app is identified by its package name and signing
   certificate, checked by Android, not by what the app claims. Unknown apps get "not paired".
   Nothing is allowed until you approve the app and choose its permissions, and all of it sits
-  behind the External control switch.
+  behind the External control switch. The permissions are *Read-only*, *Send* (each send still
+  needs your tap), *Drafts*, and **Archive read** (see "Let your assistant read a conversation"
+  below). Granting one never grants another.
 - **Status (planned):** droidcommand-AI can ask VictorSMS for its status (`node.status.get`). The
   answer says whether SMS is ready to deliver and whether the app is healthy. It never contains
   message bodies, phone numbers, your code word or your whitelist.
@@ -386,3 +388,20 @@ dates, the wizard can read it (you may need to name the columns). Importing it s
 number and never sends from TextNow.
 
 **Imported history never causes replies.** Old messages are never treated as new ones. Automatic replies are not connected to anything yet.
+
+### Let your assistant read a conversation (built; never tried on a phone)
+
+*Victorious Framework. Status: built and tested on a computer only. droidcommand-AI's side is built too, but the two apps have **not** been run against each other.*
+
+This lets droidcommand-AI (and, through it, your bots) **read** a saved conversation so it can summarise it or draft a reply for you to review. It cannot send,
+change or delete anything through this, and it can only ever see conversations you switch on one by one. Everything is **off** until you turn it on.
+
+1. **External control** must be on (Settings), and droidcommand-AI must be approved under **Connected apps**.
+2. Under Connected apps, tick **Archive read** for droidcommand-AI. This is separate from *Read-only* on purpose, because message text leaves VictorSMS.
+3. Open the conversation under *Saved conversations* and switch on **Let my assistant (droidcommand-AI) read this conversation**. Switch it off at any time; it
+   takes effect at once. Conversations you never switch on look, to the other app, as if they do not exist.
+4. On the conversation screen you see the **latest requests** from apps: which app, what it asked, when, how many items. Never the text it read.
+
+Upgrading VictorSMS, or restoring an older backup, leaves every conversation switched **off**. Deleting a conversation also removes its request log.
+Anything the assistant reads goes wherever your droidcommand-AI inference policy sends it (this device, your PC, or a cloud model you confirmed); check that
+policy in droidcommand-AI before switching a private conversation on.
