@@ -368,7 +368,7 @@ a conversation from the phone today. This section says what is coming and what i
 - **What it will do:** save an exported conversation permanently, and let you add a newer export of the same chat later. New messages are added;
   messages already saved are recognised and not duplicated; nothing you already saved is deleted just because a newer file is shorter.
 - **Supported files:** CSV, JSON, SMS Backup & Restore XML, WhatsApp "Export chat" text, pasted text with dates, and ZIPs of those. HTML is not supported.
-- **TextNow:** TextNow lets you export a conversation on Android (Menu → conversation → options → Export). Its file format is not published, so there is
+- **TextNow:** TextNow's help centre ([How to Export Your Conversations — Android](https://help.textnow.com/hc/en-us/articles/360053936194-How-to-Export-Your-Conversations-Android)) says the feature exists on Android only and starts from a conversation's Options icon; follow that page for the exact steps. The file format is not published there, so there is
   no special TextNow reader yet. Importing a TextNow export saves *history*; it does **not** give VictorSMS access to your TextNow number and it will
   never send from TextNow. Send a redacted sample if you want a dedicated reader.
 - **Who is "me"?** Files that do not say which side is you will ask once, then remember it for that provider and account.
