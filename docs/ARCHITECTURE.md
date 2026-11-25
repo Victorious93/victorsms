@@ -603,3 +603,9 @@ budgeted context from it, and only from conversations the owner switched on (see
 3. Bridged-network badges and the unified inbox.
 4. EXTERNAL_NODE protocol v1 with external control off by default.
 5. Bots and consent-gated offload.
+
+- **VoIP certificate pin and archive capabilities (2026-11-25).** `CertPin` (shared sources, pure JVM) reads the chain the SIP server presents and accepts it only if some
+  certificate's SHA-256 (DER or SPKI) equals `SipConfig.serverCertSha256`; every other outcome (no chain, mismatch, bad pin, handshake error, timeout) refuses. `LinphoneSipEngine`
+  runs it off the main thread before registering and gives Linphone only the pinned chain as `rootCa`/`rootCaData` (CN check off; the pin identifies the server), so Linphone itself
+  rejects any other certificate. Refusal text is fixed and never contains the pin. `capabilities.get` / `sms.capabilities.get` now also list the five `comms.*` archive ops (kind
+  `read`, no confirm tap); listing is not access, the `ARCHIVE_READ` grant and the per-conversation switch still apply. Not run on a device.

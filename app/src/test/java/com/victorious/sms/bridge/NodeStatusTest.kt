@@ -44,6 +44,21 @@ class NodeStatusTest {
         assertEquals(null, BridgeReads.answer(ctx, "r", "comms.conversation.read"))
     }
 
+    @Test fun capabilitiesAdvertiseEveryArchiveOpAsAReadThatNeedsNoConfirmTap() {
+        val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val ops = BridgeReads.answer(ctx, "r", "capabilities.get")!!.getJSONObject("result").getJSONArray("ops")
+        val byName = (0 until ops.length()).map { ops.getJSONObject(it) }.associateBy { it.getString("name") }
+        assertEquals("no duplicate names", ops.length(), byName.size)
+        com.victorious.comms.ArchiveWire.OPS.forEach { op ->
+            val d = byName[op] ?: throw AssertionError("$op is not advertised")
+            assertEquals(op, "read", d.getString("kind")); assertTrue(d.getBoolean("remoteAllowed")); assertFalse(d.getBoolean("requiresConfirm"))
+            assertEquals("advertised archive ops are authorized as ARCHIVE_READ", OpGroup.ARCHIVE_READ, opGroupOf(op))
+        }
+        assertTrue("the existing ops are still there", setOf("node.status.get", "sms.send", "sms.send.status").all { it in byName })
+        // Advertising is not access: without the ARCHIVE_READ grant the same op is refused.
+        assertEquals(AuthDecision.Denied("permission_denied"), PairingPolicy.decide(true, listOf(id), listOf(app(OpGroup.READ)), "comms.conversations.list").decision)
+    }
+
     @Test fun aReadGrantAllowsThemAndNoGrantDoesNot() {
         BridgeReads.STATUS.plus(BridgeReads.CAPABILITIES).forEach { op ->
             val ok = PairingPolicy.decide(true, listOf(id), listOf(app(OpGroup.READ)), op).decision as AuthDecision.Allowed

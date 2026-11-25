@@ -7,4 +7,4 @@
 
 Our own source files stay Apache-2.0 (one-way compatible with GPLv3); the voip *binary* as a whole is GPLv3, so anyone distributing it must offer the corresponding source of the whole app. The editions can be installed side by side. Twilio SMS/REST features (no SDK) exist in both.
 This is an engineering split, not legal advice: have the licences reviewed before publishing the voip edition, including Linphone's own third-party components.
-Status: `standard` builds here; `voip` **could not be built here** (download.linphone.org is blocked from this environment), and `LinphoneSipEngine` is an uncompiled draft.
+Status: both editions compile here (`assembleStandardDebug`, `assembleVoipDebug`; CI builds the voip edition as a non-blocking job). `LinphoneSipEngine` pins the server certificate (`CertPin`, unit-tested) but has **never run on a device or against a SIP server**.

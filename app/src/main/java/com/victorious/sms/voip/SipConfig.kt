@@ -21,7 +21,7 @@ data class SipConfig(val domain: String, val port: Int, val username: String, va
     }
 }
 
-/** Platform-independent call engine contract. The Linphone implementation lives in the opt-in `linphone` source set (GPLv3). */
+/** Platform-independent call engine contract. The Linphone implementation lives in the `voip` flavor source set (GPLv3). */
 interface SipEngine {
     fun register(c: SipConfig)
     fun unregister()
