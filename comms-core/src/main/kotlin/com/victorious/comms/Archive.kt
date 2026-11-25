@@ -180,6 +180,16 @@ class Archive(
         return rows.map(::stored).reversed()
     }
 
+    /**
+     * Oldest-first page of at most [limit] messages strictly after the position ([afterTs], [afterId]) in (time, id) order. Keyset paging:
+     * messages that share a timestamp are never skipped or repeated at a page boundary. Start with `Long.MIN_VALUE, 0`.
+     */
+    fun messagesAfter(conversation: Long, afterTs: Long, afterId: Long, limit: Int): List<StoredMessage> =
+        db.rows(
+            "$msgSelect WHERE m.conversation=? AND (m.ts>? OR (m.ts=? AND m.id>?)) ORDER BY m.ts, m.id LIMIT ?",
+            conversation, afterTs, afterTs, afterId, limit,
+        ).map(::stored)
+
     fun message(id: Long): StoredMessage? = db.one("$msgSelect WHERE m.id=?", id)?.let(::stored)
 
     fun messageCount(conversation: Long): Long = db.count("SELECT COUNT(*) n FROM messages WHERE conversation=?", conversation)

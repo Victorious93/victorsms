@@ -625,3 +625,9 @@ budgeted context from it, and only from conversations the owner switched on (see
   inexact, Android may deliver it late; past the 15-minute grace the text is MISSED and the owner sees it. `SmsRepository.send` returns false on any exception, including one after the radio accepted the
   text, so FAILED here means "check the thread before sending again", not "definitely not sent". **Still to build:** a screen to write, list and cancel scheduled texts, and a visible place for MISSED/UNKNOWN items.
 
+- **Export of a saved conversation (2026-11-25c).** Status: **core Implemented and JVM-tested (8 tests, 3 mutations caught); Android helper Robolectric-tested (4 tests, fake output stream); the Export dialog and the system file picker NEVER run on a device.**
+  `Exporter` (`comms-core`) streams a conversation through `Archive.messagesAfter` (keyset paging on time then id, so messages sharing a timestamp are neither skipped nor repeated) into CSV, JSON or plain text.
+  Columns/keys: `timestamp` (ISO-8601 UTC), `direction` (`in`/`out`), `sender`, `body`, `id`, `written_by`, `source`; the last two avoid the importer's sender-column names. CSV and JSON are read back by the existing generic importers,
+  which is how the round trip is tested. `ConversationExport` (`:app`) writes to the `Uri` the owner picked, adds a BOM to CSV only, and reports a failed or half-written file. **Not TextNow's format**: that format is unpublished and unsampled here.
+  The file is plaintext on disk, and anything the owner exports leaves the app's protection (the archive is already excluded from cloud backup; an exported file is not).
+
