@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Added (export a saved conversation)
+- Saved conversations → *Export…*: writes one conversation to a file you pick with the system file picker, as **CSV**, **JSON** (both read back by VictorSMS's own importer) or plain text. Streams in pages, so a huge conversation does not
+  sit in memory. CSV carries a UTF-8 byte-order mark so Excel shows accents and emoji; an optional spreadsheet-safe mode puts `'` before text that starts with `= + - @`. Bot-drafted text can be left out. The file name has no name or number in it.
+- **This is VictorSMS's own layout, not TextNow's.** TextNow does not publish its export format and this repo has no sample of it. If you have a real TextNow export, it can be matched exactly (a parser to read it, or a writer to produce it).
+- The file is **not encrypted**; the dialog says so. 8 `comms-core` tests (round trip of CSV and JSON with commas, quotes, newlines, emoji and a leading `=`; paging across 1,203 messages sharing one timestamp) and 4 app tests. Mutation-checked in
+  `comms-core`. The app screen and the file picker have never run on a device.
+
 ### Added (scheduled texts on Android — engine only, no screen yet)
 - `ScheduledSms` + `ScheduledSmsReceiver`: an inexact alarm (`setAndAllowWhileIdle`, no exact-alarm permission) wakes the app, which sends due texts as the owner's own words
   through `SmsRepository`. A text more than 15 minutes late is marked MISSED, not sent; a send interrupted by a process death is UNKNOWN and never resent. Alarms are re-armed after a

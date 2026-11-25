@@ -43,6 +43,9 @@ import androidx.compose.ui.unit.sp
 import com.victorious.comms.ColumnMapping
 import com.victorious.comms.ConversationSummary
 import com.victorious.comms.DateOrder
+import com.victorious.comms.ExportFormat
+import com.victorious.comms.ExportOptions
+import com.victorious.comms.Exporter
 import com.victorious.comms.ImportPreview
 import com.victorious.comms.ImportRecord
 import com.victorious.comms.ImportResult
@@ -50,6 +53,7 @@ import com.victorious.comms.Resolution
 import com.victorious.comms.Row
 import com.victorious.comms.StoredMessage
 import com.victorious.sms.archive.ArchiveRuntime
+import com.victorious.sms.archive.ConversationExport
 import com.victorious.sms.archive.ImportSession
 import com.victorious.sms.archive.ImportSource
 import com.victorious.sms.archive.LiveArchive
@@ -315,6 +319,19 @@ fun SavedConversationScreen(id: Long, onUpdate: () -> Unit, onBack: () -> Unit) 
     var delSummaries by remember { mutableStateOf(true) }
     var delOriginals by remember { mutableStateOf(true) }
     var note by remember { mutableStateOf<String?>(null) }
+    var exportOpen by remember { mutableStateOf(false) }
+    var exportFormat by remember { mutableStateOf(ExportFormat.CSV) }
+    var exportBots by remember { mutableStateOf(true) }
+    var exportSafe by remember { mutableStateOf(false) }
+    fun picked(f: ExportFormat): (Uri?) -> Unit = { uri ->
+        if (uri != null) scope.launch {
+            val r = withContext(Dispatchers.IO) { ConversationExport.exportTo(ctx, id, f, ExportOptions(spreadsheetSafe = exportSafe && f == ExportFormat.CSV, includeBotMessages = exportBots), uri) }
+            note = r.fold({ "Exported $it messages." }, { "Export failed, the file may be incomplete: ${it.message}" })
+        }
+    }
+    val csvPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(ExportFormat.CSV.mime), picked(ExportFormat.CSV))
+    val jsonPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(ExportFormat.JSON.mime), picked(ExportFormat.JSON))
+    val textPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(ExportFormat.TEXT.mime), picked(ExportFormat.TEXT))
 
     LaunchedEffect(rev) {
         detail = withContext(Dispatchers.IO) {
@@ -339,6 +356,7 @@ fun SavedConversationScreen(id: Long, onUpdate: () -> Unit, onBack: () -> Unit) 
         ImportNote("${c.provider}${if (c.account.isNotBlank()) " · " + c.account else ""} · ${c.messageCount} messages · last ${stamp(c.lastTs)}", Magenta)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = onUpdate) { Text("Update conversation") }
+            OutlinedButton(onClick = { exportOpen = true }) { Text("Export…") }
             OutlinedButton(onClick = { confirmDelete = true }) { Text("Delete…") }
         }
         note?.let { ImportNote(it, Cyan) }
@@ -417,6 +435,40 @@ fun SavedConversationScreen(id: Long, onUpdate: () -> Unit, onBack: () -> Unit) 
                 }) { Text("Undo import") }
             },
             dismissButton = { TextButton(onClick = { undo = null }) { Text("Cancel") } },
+        )
+    }
+
+    if (exportOpen) {
+        AlertDialog(
+            onDismissRequest = { exportOpen = false },
+            title = { Text("Export this conversation") },
+            text = {
+                Column {
+                    Text("Saves every message to a file in a place you choose. The file is not encrypted: anyone who can open it can read it.")
+                    ExportFormat.entries.forEach { f ->
+                        Row(Modifier.fillMaxWidth().clickable { exportFormat = f }, verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(exportFormat == f, null); Text(f.label, modifier = Modifier.padding(start = 8.dp, top = 8.dp, bottom = 8.dp))
+                        }
+                    }
+                    Row(Modifier.fillMaxWidth().clickable { exportBots = !exportBots }, verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(exportBots, null); Text("Include text a bot drafted for me", modifier = Modifier.padding(start = 8.dp, top = 8.dp, bottom = 8.dp))
+                    }
+                    if (exportFormat == ExportFormat.CSV) {
+                        Row(Modifier.fillMaxWidth().clickable { exportSafe = !exportSafe }, verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(exportSafe, null)
+                            Text("Safe to open in a spreadsheet (puts ' before text starting with = + - @, so it cannot run as a formula)", modifier = Modifier.padding(start = 8.dp, top = 8.dp, bottom = 8.dp))
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    exportOpen = false
+                    val name = Exporter.fileName(h.archive, id, exportFormat)
+                    when (exportFormat) { ExportFormat.CSV -> csvPicker.launch(name); ExportFormat.JSON -> jsonPicker.launch(name); ExportFormat.TEXT -> textPicker.launch(name) }
+                }) { Text("Choose where to save") }
+            },
+            dismissButton = { TextButton(onClick = { exportOpen = false }) { Text("Cancel") } },
         )
     }
 
