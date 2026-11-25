@@ -149,7 +149,9 @@ fun MailComposeScreen(accountId: String, mode: String, ref: String, onDone: () -
             Button(enabled = acctId.isNotBlank() && addrs(to + "," + cc + "," + bcc).isNotEmpty(), onClick = {
                 val d = build(); status = "Sending…"
                 scope.launch(Dispatchers.IO) {
-                    val item = repo.outbox.enqueue(d); repo.flushOutbox(); val s = repo.db.SqlOutboxStore().get(item.draft.id)
+                    // enqueue() refuses an account whose password is missing; that must be a message, not a crash.
+                    val item = runCatching { repo.outbox.enqueue(d) }.getOrElse { status = "Not sent: this account has no saved password. Re-add it in Settings → Email accounts."; return@launch }
+                    runCatching { repo.flushOutbox() }; val s = repo.db.SqlOutboxStore().get(item.draft.id)
                     status = when (s?.state) { OutState.SENT -> "Sent"; OutState.QUEUED -> "Queued — will be sent when the connection is back (see Outbox)"; OutState.UNCERTAIN -> "Connection lost while sending — it may have been delivered. See Outbox before sending again."; else -> "Not sent: ${s?.detail}" }
                     if (s?.state == OutState.SENT) withContext(Dispatchers.Main) { onDone() }
                 }
@@ -172,9 +174,9 @@ fun MailOutboxScreen(onBack: () -> Unit) {
                     Text("${it.draft.subject.ifBlank { "(no subject)" }} → ${it.draft.to.joinToString { a -> a.address }}", color = MaterialTheme.colorScheme.onBackground)
                     Text("${it.state.name}${it.detail?.let { d -> " — $d" } ?: ""}", color = if (it.state == OutState.UNCERTAIN || it.state == OutState.FAILED) Magenta else Cyan, fontSize = 12.sp)
                     Row {
-                        if (it.state == OutState.UNCERTAIN) { TextButton(onClick = { scope.launch(Dispatchers.IO) { repo.outbox.resendAnyway(it.draft.id); refresh() } }) { Text("Send again anyway", color = Magenta) }
+                        if (it.state == OutState.UNCERTAIN) { TextButton(onClick = { scope.launch(Dispatchers.IO) { runCatching { repo.outbox.resendAnyway(it.draft.id) }; refresh() } }) { Text("Send again anyway", color = Magenta) }
                             TextButton(onClick = { repo.outbox.markSent(it.draft.id); refresh() }) { Text("It arrived", color = Cyan) } }
-                        if (it.state == OutState.QUEUED) TextButton(onClick = { scope.launch(Dispatchers.IO) { repo.flushOutbox(); refresh() } }) { Text("Try now", color = Cyan) }
+                        if (it.state == OutState.QUEUED) TextButton(onClick = { scope.launch(Dispatchers.IO) { runCatching { repo.flushOutbox() }; refresh() } }) { Text("Try now", color = Cyan) }
                         TextButton(onClick = { repo.outbox.discard(it.draft.id); refresh() }) { Text("Discard", color = Magenta) }
                     }
                 }

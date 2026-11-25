@@ -113,6 +113,24 @@ class ImportersTest {
         assertEquals("whatsapp", r.providerGuess)
     }
 
+    @Test fun largeMediaInAZipIsSkippedWithoutBufferingAndTheChatStillImports() {
+        // Regression (review Nov 24): media entries used to be read fully into memory (and counted against the 256 MB
+        // expansion limit) before the name check, so a big "export with media" could exhaust the heap or abort the import.
+        val bos = java.io.ByteArrayOutputStream()
+        java.util.zip.ZipOutputStream(bos).use { z ->
+            z.putNextEntry(java.util.zip.ZipEntry("VID-0001.mp4"))
+            val chunk = ByteArray(1 shl 20)
+            repeat(257) { z.write(chunk) }                                           // 257 MB of zeros: tiny compressed, huge expanded
+            z.closeEntry()
+            z.putNextEntry(java.util.zip.ZipEntry("_chat.txt"))
+            z.write("1/5/26, 12:00 PM - Don: hello\n1/5/26, 12:01 PM - Sam: hi\n".toByteArray()); z.closeEntry()
+        }
+        val r = ZipImporter().parse(ImportInput("export.zip", bos.toByteArray()), utc)
+        assertEquals(2, r.messages.size)
+        assertTrue(r.errors.isEmpty())
+        assertTrue(r.warnings.any { it.contains("non-text files") })
+    }
+
     @Test fun detectionPicksTheRightImporterAndRefusesUnknownFormats() {
         assertEquals("sms-backup-xml", Importers.detect(Fx.smsXml(Fx.conversation(3))).first().first.id)
         assertEquals("csv", Importers.detect(Fx.csv(Fx.conversation(3))).first().first.id)

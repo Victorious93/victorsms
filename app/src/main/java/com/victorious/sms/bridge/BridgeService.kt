@@ -55,7 +55,14 @@ class BridgeService : Service() {
 
     /** Answers through [deliver], on this thread for every op except the archive reads, which answer from [worker]. */
     private fun process(uid: Int, frame: String, deliver: (JSONObject) -> Unit) {
-        handle(uid, frame, deliver)?.let(deliver)
+        // This runs on the main thread: an exception from any op (or from a worker that was already shut down because a
+        // stale client still holds our Messenger after onDestroy) must become an error reply, never an app crash.
+        val r = try { handle(uid, frame, deliver) } catch (_: java.util.concurrent.RejectedExecutionException) {
+            err(runCatching { JSONObject(frame).optString("id").take(64) }.getOrDefault(""), "unavailable")
+        } catch (_: Exception) {
+            err(runCatching { JSONObject(frame).optString("id").take(64) }.getOrDefault(""), "internal_error")
+        }
+        r?.let(deliver)
     }
 
     /** Null means [deliver] will be called later from another thread. */
