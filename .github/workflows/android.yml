@@ -49,7 +49,6 @@ jobs:
   # a failure here shows on the PR but does not block it.
   voip-edition:
     runs-on: ubuntu-latest
-    continue-on-error: true
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
