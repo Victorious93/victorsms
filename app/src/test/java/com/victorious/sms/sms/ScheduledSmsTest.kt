@@ -116,15 +116,15 @@ class ScheduledSmsTest {
 
     @Test fun armingSetsOneAlarmForTheEarliestMessageAndCancelClearsIt() {
         val alarms = shadowOf(ctx.getSystemService(AlarmManager::class.java))
-        assertNull(alarms.nextScheduledAlarm)
+        assertNull(alarms.peekNextScheduledAlarm())
         val c = conversation()
         val later = scheduler.schedule(c, "b", now + 90 * min)
         val sooner = scheduler.schedule(c, "a", now + 20 * min)
         ScheduledSms.arm(ctx, scheduler)
-        assertNotNull(alarms.nextScheduledAlarm)
-        assertEquals(sooner.sendAt, alarms.nextScheduledAlarm!!.triggerAtTime)
+        assertNotNull(alarms.peekNextScheduledAlarm())
+        assertEquals(sooner.sendAt, alarms.peekNextScheduledAlarm()!!.triggerAtTime)
         scheduler.cancel(sooner.uid); scheduler.cancel(later.uid)
         ScheduledSms.arm(ctx, scheduler)
-        assertNull(alarms.nextScheduledAlarm)
+        assertNull(alarms.peekNextScheduledAlarm())
     }
 }
