@@ -122,7 +122,7 @@ class ScheduledSmsTest {
         val sooner = scheduler.schedule(c, "a", now + 20 * min)
         ScheduledSms.arm(ctx, scheduler)
         assertNotNull(alarms.nextScheduledAlarm)
-        assertEquals(sooner.sendAt, alarms.nextScheduledAlarm.triggerAtTime)
+        assertEquals(sooner.sendAt, alarms.nextScheduledAlarm!!.triggerAtTime)
         scheduler.cancel(sooner.uid); scheduler.cancel(later.uid)
         ScheduledSms.arm(ctx, scheduler)
         assertNull(alarms.nextScheduledAlarm)
