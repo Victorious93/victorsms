@@ -44,3 +44,19 @@ jobs:
           name: victorsms-debug-x86_64
           path: app/build/outputs/apk/standard/debug/*-x86_64-debug.apk
           if-no-files-found: error
+
+  # The voip edition (GPLv3, Linphone SDK) was never built in CI. Informational only until it is known to compile:
+  # a failure here shows on the PR but does not block it.
+  voip-edition:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Assemble voip debug
+        run: ./gradlew assembleVoipDebug --stacktrace

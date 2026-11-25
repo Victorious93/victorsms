@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Fixed (review, Nov 24)
+- Mail outbox: claiming an item is one atomic step, so two flushes at once (inbox poll + Send, or a double Send on a PC draft) or a double tap on
+  *Send again anyway* sends once and no longer throws `IllegalStateException` (which crashed the screen). Compose/Outbox buttons never crash on a
+  missing account password.
+- Archive migrations: each step records its `user_version` inside its own transaction; a crash between steps no longer leaves an archive that fails
+  to open forever.
+- Bridge: an exception from an op, or a request reaching a service whose worker was already shut down, is an error reply instead of an app crash.
+- ZIP import: media entries are skipped by name without being buffered in memory, so a large export with media cannot exhaust the heap or trip the
+  256 MB expansion limit before the chat text is read.
+- CI: informational (non-blocking) job that assembles the voip edition, which CI never built before.
+
 ### Added
 - `comms-core` module: conversation archive schema v1 with FTS4 search, importers (CSV, JSON, SMS Backup XML, WhatsApp-style text, pasted text, ZIP),
   incremental import with duplicate/overlap/conflict handling and rollback, budgeted context retrieval, encrypted backup, selective deletion, and the
