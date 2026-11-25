@@ -123,4 +123,18 @@ class SchedulerTest {
         assertEquals(0, Providers.of("signal").maxBodyChars)
         assertNull(Providers.refusal("sms", "ok"))
     }
+
+    @Test fun smsRecipientIsTheOneOtherNumberAndNothingAmbiguous() {
+        val live = LiveIngest(a)
+        live.record("+1 (555) 010-0177", "hi", now, Direction.IN)
+        live.record("+1 (555) 010-0177", "yo", now + 1, Direction.OUT)
+        val c = a.conversations().single { it.title.startsWith("+1") }.id
+        assertEquals("+1 (555) 010-0177", a.smsRecipient(c))
+        a.upsertParticipant(c, "p:5550100199", "Extra", "5550100199", false) // now a group of two others
+        assertNull(a.smsRecipient(c))
+        val named = a.createConversation("sms", "", "sms||n:sam", "Sam", false)
+        a.upsertParticipant(named, "n:sam", "Sam", null, false) // a name with no number
+        assertNull(a.smsRecipient(named))
+        assertNull(a.smsRecipient(9999))
+    }
 }
