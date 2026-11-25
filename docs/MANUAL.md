@@ -72,7 +72,7 @@ not decide or run fleet actions itself.
    remote request, see below).
 4. Links like `sms:` / `smsto:` from other apps open a new message. "Reply with text" on incoming
    calls is supported.
-5. MMS (pictures) are not downloaded yet (planned). You can use SMS without any Matrix account:
+5. Incoming MMS (pictures) are downloaded and decoded when VictorSMS is the default SMS app (see **MMS** below). You can use SMS without any Matrix account:
    tap **Skip: use SMS only** on the sign-in screen.
    `[screenshot: sms thread]`
 
@@ -240,7 +240,7 @@ forwards; it never runs the command.
 | `POST_NOTIFICATIONS` | Remote SMS approval prompts | built |
 | Default SMS role | Required by Android to receive and store SMS | built |
 | `RECEIVE_SMS`, `READ_SMS` | Receive and show your texts | built |
-| `RECEIVE_MMS`, `RECEIVE_WAP_PUSH` | Required for the default SMS role; MMS download planned | declared |
+| `RECEIVE_MMS`, `RECEIVE_WAP_PUSH` | Required for the default SMS role; incoming MMS download and decode | declared |
 | `POST_NOTIFICATIONS` | New-message notifications | planned |
 | Call-screening role | Filters calls using your blocklist | built |
 | Dialer role, `CALL_PHONE` | Be your phone app and place calls | built |
@@ -344,7 +344,7 @@ You can deny any optional permission; the related feature simply stays off.
 ## Email (new)
 
 * **Add an account:** Settings → Email accounts → manual IMAP/SMTP. TLS is required (implicit TLS or STARTTLS; plaintext is never offered). Certificates are validated; for a private server you may pin its certificate SHA-256. Passwords are stored encrypted (Android Keystore) and never leave the phone. Sign-in with Google/Microsoft needs this project's own OAuth registration and is **not available** in this build: use an app password.
-* **Inbox:** texts, email, Matrix and alias chats appear together with a channel badge and the SIM/account under the title. Filters: All, SMS, Email, Matrix, Alias, Unread; search covers names, addresses, accounts and text. Two contacts with the same name stay separate rows; the same person over SMS and email has two rows, and each reply goes out on its own channel and identity. A failed send never switches channel.
+* **Inbox:** texts, email, Matrix and alias chats appear together with a channel badge and the SIM/account under the title. Filters: All, SMS, Email, Matrix, Alias, Unread. Each filter shows how many unread conversations it holds, for example "SMS (3)", and Unread shows the total; search covers names, addresses, accounts and text. Two contacts with the same name stay separate rows; the same person over SMS and email has two rows, and each reply goes out on its own channel and identity. A failed send never switches channel.
 * **Compose / Reply / Reply all / Forward / Cc / Bcc / attachments / drafts:** replies use the account the mail arrived on and honour Reply-To; threading headers are kept.
 * **Outbox:** sends are queued on the phone. If the connection drops after the server may have accepted a message the state is **UNCERTAIN**: it is never re-sent automatically; choose "Send again anyway" (same Message-ID) or "It arrived".
 * **Remote images are blocked** in HTML mail by default (per-message "show"); scripts, forms and frames are always removed.
@@ -356,7 +356,11 @@ A paired DroidCommand can hand an SMS/email **draft** to VictorSMS (pair it unde
 
 ## MMS
 
-VictorSMS now parses the MMS WAP push and starts the carrier download (`SmsManager.downloadMultimediaMessage`), keeping the raw PDU. **Not implemented:** decoding/displaying MMS content and sending MMS. Needs a SIM with MMS service to verify.
+VictorSMS parses the MMS WAP push and starts the carrier download (`SmsManager.downloadMultimediaMessage`). When the download finishes, it decodes the message (sender, recipients, subject, date, text and attachment parts) and inserts it into the phone's MMS store, so it shows up like any other MMS. If decoding or the insert fails, the raw message is kept on the phone for a later retry and is never guessed at. **Not implemented:** sending MMS from the SIM (alias MMS goes through Twilio). Needs a SIM with MMS service to verify on a real phone.
+
+## Background mail sync
+
+While at least one email account is set up, Android checks INBOX for new mail about every 15 minutes whenever there is a network (JobScheduler; Android decides the exact time and may delay it in Doze). Background sync only fetches. Queued outgoing mail is sent only while you are in the app. Removing the last account stops background sync. Nothing about your mail is written to logs.
 
 ## Your own SIP/VoIP (in progress)
 

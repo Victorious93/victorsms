@@ -50,10 +50,10 @@ class MailRepository private constructor(private val context: Context) {
 
     fun addAccount(a: StoredAccount, secret: String): StoredAccount {
         val withId = if (a.id.isBlank()) a.copy(id = UUID.randomUUID().toString()) else a
-        secrets.put(withId.id, secret); db.saveAccount(withId); return withId
+        secrets.put(withId.id, secret); db.saveAccount(withId); MailSyncJob.schedule(context); return withId
     }
 
-    fun removeAccount(id: String) { secrets.remove(id); db.deleteAccount(id) }
+    fun removeAccount(id: String) { secrets.remove(id); db.deleteAccount(id); if (db.accounts().isEmpty()) MailSyncJob.cancel(context) }
 
     /** Connect + list folders; returns null on success or a short reason (never contains the password). */
     fun test(a: StoredAccount, secret: String): String? = try {

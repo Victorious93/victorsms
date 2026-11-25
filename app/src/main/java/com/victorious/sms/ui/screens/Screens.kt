@@ -207,6 +207,8 @@ fun RoomListScreen(
     val aliasEntries = aliasThreads.map { InboxEntry.Alias(it) }
     val mailEntries = mailRows.map { InboxEntry.Mail(it) }
     val allEntries: List<InboxEntry> = smsThreads.map { InboxEntry.Sms(it) } + aliasEntries + mailEntries + roomsByAccount.values.flatten().map { InboxEntry.Matrix(it) }
+    // Unread conversations per source, shown on the filter chips ("SMS (3)"). "all" stays plain; "unread" carries the total.
+    val unreadCounts = UnreadCounts.of(allEntries.map { e -> (when (e) { is InboxEntry.Sms -> "sim"; is InboxEntry.Alias -> "alias"; is InboxEntry.Mail -> "mail"; is InboxEntry.Matrix -> "matrix"; else -> "other" }) to e.unread })
     val q = query.trim().lowercase()
     val entries: List<InboxEntry> = bots.filter { filter == "all" && q.isEmpty() } + allEntries.filter { e ->
         when (filter) {
@@ -250,7 +252,8 @@ fun RoomListScreen(
         }
         OutlinedTextField(query, { query = it }, placeholder = { Text("Search texts and email") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp))
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp).horizontalScroll(rememberScrollState())) {
-            listOf("all" to "All", "sim" to "SMS", "mail" to "Email", "matrix" to "Matrix", "alias" to "Alias", "unread" to "Unread").forEach { (k, l) ->
+            listOf("all" to "All", "sim" to "SMS", "mail" to "Email", "matrix" to "Matrix", "alias" to "Alias", "unread" to "Unread").forEach { (k, l0) ->
+                val l = UnreadCounts.label(l0, unreadCounts[k] ?: 0)
                 TextButton(onClick = { filter = k }) { Text(if (filter == k) "[$l]" else l, color = if (filter == k) Magenta else Cyan) }
             }
             TextButton(onClick = onCompose) { Text("＋ Email", color = Cyan) }
