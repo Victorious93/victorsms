@@ -122,8 +122,53 @@ class MailCoreTest {
         assertEquals(OutState.UNCERTAIN, ob.flush().single().state); assertEquals(1, fs.calls)
         repeat(3) { ob.flush() }; assertEquals("no automatic duplicate", 1, fs.calls)
         fs.outcome = SendOutcome.Accepted
-        val re = ob.resendAnyway(i.draft.id); assertEquals(OutState.SENT, re.state); assertEquals(2, fs.calls)
+        val re = ob.resendAnyway(i.draft.id)!!; assertEquals(OutState.SENT, re.state); assertEquals(2, fs.calls)
         assertEquals("same Message-ID on explicit re-send", i.draft.messageId, re.draft.messageId)
+    }
+
+    /** Sender that blocks inside send() until released, so a second caller runs while the first is mid-send. */
+    class GateSender : SmtpSender() {
+        val entered = java.util.concurrent.CountDownLatch(1); val release = java.util.concurrent.CountDownLatch(1)
+        val calls = java.util.concurrent.atomic.AtomicInteger()
+        override fun send(account: MailAccount, draft: Draft): SendOutcome { calls.incrementAndGet(); entered.countDown(); release.await(); return SendOutcome.Accepted }
+    }
+
+    /** A store whose list() can return a stale snapshot: what a second flush sees if it listed just before the first one claimed. */
+    class StaleListStore : OutboxStore {
+        val inner = InMemoryOutboxStore(); @Volatile var staleAll: List<OutboxItem>? = null
+        override fun put(item: OutboxItem) = inner.put(item); override fun get(draftId: String) = inner.get(draftId)
+        override fun all() = staleAll ?: inner.all()
+    }
+
+    @Test fun concurrentFlushesSendOnceAndNeverThrow() {
+        // Regression (review Nov 24): a second flush that saw the item as QUEUED used to hit check() and throw
+        // IllegalStateException, which crashed the Send button / draft review coroutine.
+        val a = account("a", "alice@example.test"); val store = StaleListStore(); val gs = GateSender()
+        val ob = Outbox(store, { a }, gs)
+        val i = ob.enqueue(draft(a, "bob@example.test", "race", "x"))
+        var first: List<OutboxItem>? = null
+        val t = Thread { first = ob.flush() }.apply { start() }
+        assertTrue(gs.entered.await(10, java.util.concurrent.TimeUnit.SECONDS))
+        // While the first flush is mid-send, a second caller that listed the item as QUEUED just before the claim.
+        store.staleAll = listOf(store.get(i.draft.id)!!.copy(state = OutState.QUEUED))
+        val second = ob.flush(); store.staleAll = null
+        gs.release.countDown(); t.join(10_000)
+        assertTrue(second.isEmpty()); assertEquals(1, first!!.size); assertEquals(1, gs.calls.get())
+        assertEquals(OutState.SENT, store.get(i.draft.id)!!.state)
+    }
+
+    @Test fun doubleTapOnSendAgainAnywaySendsOnce() {
+        val a = account("a", "alice@example.test"); val store = InMemoryOutboxStore(); val gs = GateSender()
+        val ob = Outbox(store, { a }, gs)
+        val i = ob.enqueue(draft(a, "bob@example.test", "maybe", "x"))
+        store.put(store.get(i.draft.id)!!.copy(state = OutState.UNCERTAIN))
+        val t = Thread { ob.resendAnyway(i.draft.id) }.apply { start() }
+        assertTrue(gs.entered.await(10, java.util.concurrent.TimeUnit.SECONDS))
+        val second = ob.resendAnyway(i.draft.id)                                      // used to throw IllegalStateException
+        assertEquals(OutState.SENDING, second!!.state)
+        gs.release.countDown(); t.join(10_000)
+        assertEquals(1, gs.calls.get()); assertEquals(OutState.SENT, store.get(i.draft.id)!!.state)
+        assertEquals(null, ob.resendAnyway("no-such-id"))
     }
 
     @Test fun processDeathWhileSendingBecomesUncertain() {

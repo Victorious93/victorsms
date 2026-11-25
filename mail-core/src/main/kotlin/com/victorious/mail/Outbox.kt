@@ -43,15 +43,23 @@ class Outbox(private val store: OutboxStore, private val accounts: (String) -> M
         store.all().filter { it.state == OutState.SENDING }.forEach { store.put(it.copy(state = OutState.UNCERTAIN, detail = "the app stopped while sending; it may or may not have been delivered", updatedMs = clock())) }
     }
 
-    /** Sends every QUEUED item (never UNCERTAIN/FAILED). Returns the items processed. */
-    fun flush(): List<OutboxItem> = store.all().filter { it.state == OutState.QUEUED }.map { attempt(it.draft.id) }
+    /**
+     * Sends every QUEUED item (never UNCERTAIN/FAILED). Returns the items this call actually sent.
+     * Safe to call from several threads at once (inbox poll, Send button, draft review): an item another flush already
+     * claimed is skipped, never sent twice and never an exception.
+     */
+    fun flush(): List<OutboxItem> = store.all().filter { it.state == OutState.QUEUED }.mapNotNull { attempt(it.draft.id) }
 
-    private fun attempt(id: String): OutboxItem {
-        val item = synchronized(this) {
-            val cur = store.get(id) ?: error("no such item")
-            check(cur.state == OutState.QUEUED) { "only queued items are sent" }
-            cur.copy(state = OutState.SENDING, attempts = cur.attempts + 1, updatedMs = clock()).also(store::put)   // persisted BEFORE any network use
-        }
+    /** Claims [id] (QUEUED -> SENDING) atomically, or returns null if it is gone or no longer QUEUED. */
+    private fun claim(id: String, from: OutState = OutState.QUEUED, detail: String? = null): OutboxItem? = synchronized(this) {
+        val cur = store.get(id) ?: return@synchronized null
+        if (cur.state != from) return@synchronized null
+        cur.copy(state = OutState.SENDING, attempts = cur.attempts + 1, detail = detail ?: cur.detail, updatedMs = clock()).also(store::put)   // persisted BEFORE any network use
+    }
+
+    private fun attempt(id: String): OutboxItem? = claim(id)?.let { send(it) }
+
+    private fun send(item: OutboxItem): OutboxItem {
         val acct = accounts(item.draft.accountId)
         val outcome = if (acct == null) SendOutcome.Rejected("account was removed") else try { sender.send(acct, item.draft) } catch (e: Exception) { SendOutcome.Uncertain("unexpected ${e.javaClass.simpleName}") }
         val next = when (outcome) {
@@ -64,10 +72,13 @@ class Outbox(private val store: OutboxStore, private val accounts: (String) -> M
         return next
     }
 
-    /** Explicit owner decision after UNCERTAIN: send again (same Message-ID). */
-    fun resendAnyway(id: String): OutboxItem {
-        synchronized(this) { val c = store.get(id) ?: error("no such item"); check(c.state == OutState.UNCERTAIN) { "only an uncertain send can be re-sent this way" }; store.put(c.copy(state = OutState.QUEUED, detail = "re-sent by the owner", updatedMs = clock())) }
-        return attempt(id)
+    /**
+     * Explicit owner decision after UNCERTAIN: send again (same Message-ID). The UNCERTAIN -> SENDING step is one atomic
+     * claim, so a double tap (or a flush running at the same time) sends once; the extra call returns the current item.
+     */
+    fun resendAnyway(id: String): OutboxItem? {
+        val claimed = claim(id, from = OutState.UNCERTAIN, detail = "re-sent by the owner") ?: return store.get(id)
+        return send(claimed)
     }
 
     /** Explicit owner decision: it did arrive. */
