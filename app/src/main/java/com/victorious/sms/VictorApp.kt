@@ -9,6 +9,8 @@ class VictorApp : Application() {
         // Firebase is only used for incoming alias-call pushes, and only if Don configured his own project.
         VoiceCalling.initFirebaseIfConfigured(this)
         // Own SIP server: register the Telecom account and (re)connect if provisioned. Never throws at startup.
+        // Background mail sync only exists while at least one mail account is configured.
+        runCatching { if (com.victorious.sms.mail.MailRepository.get(this).storedAccounts().isNotEmpty()) com.victorious.sms.mail.MailSyncJob.schedule(this) }
         runCatching { com.victorious.sms.phone.SipConnectionService.register(this); com.victorious.sms.voip.SipCalls.start(this) }
     }
 }

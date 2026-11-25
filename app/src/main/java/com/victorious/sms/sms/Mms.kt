@@ -61,12 +61,17 @@ object MmsDownloader {
     }
 }
 
-/** Download finished: keep the raw PDU. Parsing the MMS body into text/attachments for display is NOT implemented (see docs/MANUAL.md). */
+/** Download finished: decode the m-retrieve-conf and insert it into the system MMS store. If decoding or the insert fails, the raw PDU is
+ *  kept under filesDir/mms for a later retry instead of being lost. Content is never logged. */
 class MmsDownloadedReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val tid = intent.getStringExtra("tid") ?: return
         val src = File(File(context.cacheDir, "mms-dl"), "$tid.dat")
-        if (resultCode == android.app.Activity.RESULT_OK && src.length() > 0) src.copyTo(File(MmsDownloader.dir(context), "$tid.pdu"), overwrite = true)
+        if (resultCode == android.app.Activity.RESULT_OK && src.length() in 1..MmsRetrieve.MAX_PDU_BYTES.toLong()) {
+            val pdu = src.readBytes()
+            val inserted = MmsRetrieve.parse(pdu)?.let { MmsStore.insertInbox(context, it) } != null
+            if (!inserted) File(MmsDownloader.dir(context), "$tid.pdu").writeBytes(pdu)
+        }
         src.delete()
     }
 }
