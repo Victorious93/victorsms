@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Added (scheduled texts on Android — engine only, no screen yet)
+- `ScheduledSms` + `ScheduledSmsReceiver`: an inexact alarm (`setAndAllowWhileIdle`, no exact-alarm permission) wakes the app, which sends due texts as the owner's own words
+  through `SmsRepository`. A text more than 15 minutes late is marked MISSED, not sent; a send interrupted by a process death is UNKNOWN and never resent. Alarms are re-armed after a
+  reboot, an app update and at app start. New permission: `RECEIVE_BOOT_COMPLETED`.
+- `Archive.smsRecipient(conversation)`: the one phone number a conversation can be texted at; groups and name-only conversations return null and the text fails instead of guessing.
+- 1 new `comms-core` test and 8 new app tests (Robolectric, fake sender). **There is no way to schedule a text yet (no screen), and nothing has run on a device or fired a real alarm.**
+
 ### Added (scheduled messages, provider capabilities — `comms-core` only)
 - `Scheduler`: owner-written messages that go out later. Archive schema **v3** adds a `scheduled` table. A message that comes due while the phone could not send (more than 15 min late)
   becomes MISSED and is never sent late; a send in flight at a restart becomes UNKNOWN and is never resent; sending is refused if the conversation's provider cannot send. It stores and

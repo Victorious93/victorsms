@@ -120,6 +120,16 @@ class Archive(
     fun participants(conversation: Long): List<Row> =
         db.rows("SELECT * FROM participants WHERE conversation=? ORDER BY id", conversation)
 
+    /**
+     * The one phone number a text to this conversation would go to, or null: group chats, conversations whose other party is a
+     * name with no number, and anything ambiguous return null so a sender refuses instead of guessing.
+     */
+    fun smsRecipient(conversation: Long): String? {
+        val others = participants(conversation).filter { it.long("is_self") == 0L }
+        if (others.size != 1) return null
+        return others[0]["phone"]?.trim()?.takeIf { it.isNotEmpty() }
+    }
+
     internal fun createConversation(provider: String, account: String, matchKey: String, title: String, isGroup: Boolean): Long {
         val now = clock()
         return db.insert(

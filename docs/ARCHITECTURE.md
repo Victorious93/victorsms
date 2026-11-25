@@ -618,3 +618,10 @@ budgeted context from it, and only from conversations the owner switched on (see
   (exact-alarm permission), a sender that calls `claimDue()` then `markSent`/`markFailed` and records the sent text through `LiveArchive`, and a screen. Scheduled rows are not part of the
   encrypted backup, on purpose (a restore must not send old messages).
 
+- **Scheduled texts on Android (2026-11-25b).** Status: **engine Implemented and Robolectric-tested (8 tests, fake sender); NO screen; never run on a device; a real alarm has never fired.**
+  `ScheduledSms` (`sms/ScheduledSms.kt`) wraps `Scheduler`: `schedule`/`cancel`/`list`, `runDue` (once per process it turns an interrupted SENDING into UNKNOWN, then claims what is due, resolves the
+  number with `Archive.smsRecipient`, sends through `SmsRepository.send(..., Author.OWNER)`, and records SENT or FAILED) and `arm` (one inexact alarm for the earliest pending message).
+  `ScheduledSmsReceiver` (not exported) handles the alarm, `BOOT_COMPLETED` and `MY_PACKAGE_REPLACED`; `VictorApp` also re-arms at start, but only if the archive already exists. Because the alarm is
+  inexact, Android may deliver it late; past the 15-minute grace the text is MISSED and the owner sees it. `SmsRepository.send` returns false on any exception, including one after the radio accepted the
+  text, so FAILED here means "check the thread before sending again", not "definitely not sent". **Still to build:** a screen to write, list and cancel scheduled texts, and a visible place for MISSED/UNKNOWN items.
+
