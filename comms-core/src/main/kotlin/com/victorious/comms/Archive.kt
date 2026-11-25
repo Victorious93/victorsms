@@ -309,6 +309,7 @@ class Archive(
         db.update("DELETE FROM participants WHERE conversation=?", id)
         db.update("DELETE FROM auto_rules WHERE conversation=?", id)
         db.update("DELETE FROM outbox WHERE conversation=?", id)
+        db.update("DELETE FROM scheduled WHERE conversation=?", id)
         if (deleteFacts) db.update("DELETE FROM facts WHERE conversation=?", id)
         if (deleteSummaries) db.update("DELETE FROM summaries WHERE conversation=?", id)
         db.update("DELETE FROM conversations WHERE id=?", id)

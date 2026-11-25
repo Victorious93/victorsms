@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Added (scheduled messages, provider capabilities — `comms-core` only)
+- `Scheduler`: owner-written messages that go out later. Archive schema **v3** adds a `scheduled` table. A message that comes due while the phone could not send (more than 15 min late)
+  becomes MISSED and is never sent late; a send in flight at a restart becomes UNKNOWN and is never resent; sending is refused if the conversation's provider cannot send. It stores and
+  decides; it does not send.
+- `Providers`: one table of what each provider label can do (`sms`, `matrix`, `email` can send; `whatsapp`, `textnow`, `paste`, `zip` are history only; unknown labels get nothing).
+- 12 new `comms-core` tests (99 total, all pass). **Not wired into the app: no alarm, no sender, no screen. Never run on a device.** `:app` could not be compiled in the environment
+  that wrote this (no Android SDK), so no Android code was touched.
+
 ### Fixed (voip pin, capabilities)
 - voip edition: `LinphoneSipEngine` now really pins the server certificate (SHA-256 of the certificate or its public key, fails closed, self-signed accepted only when pinned) and compiles against Linphone 5.3.x; the earlier draft did not compile and its pin was a no-op.
 - `capabilities.get` / `sms.capabilities.get` list the `comms.*` archive ops.

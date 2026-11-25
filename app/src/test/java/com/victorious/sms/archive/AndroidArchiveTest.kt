@@ -67,11 +67,11 @@ class AndroidArchiveTest {
     )
 
     @Test fun theSchemaMigratesOnAndroidSqliteAndTheVersionIsOurs() {
-        assertEquals("2", db.rows("PRAGMA user_version")[0]["user_version"])
+        assertEquals(com.victorious.comms.Schema.VERSION.toString(), db.rows("PRAGMA user_version")[0]["user_version"])
         Archive(db) // reopening is a no-op
-        assertEquals("2", db.rows("PRAGMA user_version")[0]["user_version"])
+        assertEquals(com.victorious.comms.Schema.VERSION.toString(), db.rows("PRAGMA user_version")[0]["user_version"])
         val tables = db.rows("SELECT name FROM sqlite_master WHERE type='table'").map { it["name"] }
-        assertTrue(tables.containsAll(listOf("conversations", "messages", "message_fts", "imports", "outbox")))
+        assertTrue(tables.containsAll(listOf("conversations", "messages", "message_fts", "imports", "outbox", "scheduled")))
     }
 
     @Test fun importUpdateSearchAndRollbackWorkOnAndroidsSqlite() {

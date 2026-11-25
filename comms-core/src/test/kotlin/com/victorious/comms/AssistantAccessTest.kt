@@ -220,11 +220,11 @@ class AssistantAccessTest {
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "Old friend", "textnow", "", "k", 0L, 1L, 1L,
         )
         val upgraded = Archive(db)
-        assertEquals("2", db.rows("PRAGMA user_version")[0]["user_version"])
+        assertEquals(Schema.VERSION.toString(), db.rows("PRAGMA user_version")[0]["user_version"])
         assertFalse("an old conversation must not become visible by upgrading", upgraded.conversations().single().assistantAccess)
         assertEquals("not_found", (ArchiveOps(upgraded).call(me, ArchiveWire.READ, obj("conversation" to "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")) as ArchiveReply.Error).code)
         Archive(db) // reopening is a no-op
-        assertEquals("2", db.rows("PRAGMA user_version")[0]["user_version"])
+        assertEquals(Schema.VERSION.toString(), db.rows("PRAGMA user_version")[0]["user_version"])
     }
 
     @Test fun theOwnersSharingChoicesSurviveABackupButAnOlderBackupRestoresWithNothingShared() {
@@ -250,7 +250,7 @@ class AssistantAccessTest {
         }
         fresh.restoreFrom(v1)
         assertFalse(fresh.conversations().single().assistantAccess)
-        val tooNew = buildJsonObject { put("schema", 3) }
+        val tooNew = buildJsonObject { put("schema", Schema.VERSION + 1) }
         try { fresh.restoreFrom(tooNew); error("a newer backup must be refused") } catch (_: IllegalArgumentException) { }
     }
 

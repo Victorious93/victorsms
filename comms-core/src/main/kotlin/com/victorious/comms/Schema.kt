@@ -14,7 +14,7 @@ package com.victorious.comms
  *    unapproved bot text.
  */
 object Schema {
-    const val VERSION = 2
+    const val VERSION = 3
 
     fun migrate(db: SqlDb) {
         val current = db.one("PRAGMA user_version")?.get("user_version")?.toIntOrNull() ?: 0
@@ -23,6 +23,7 @@ object Schema {
         // next step instead of re-running CREATE TABLE on a database that already has the tables (which would fail forever).
         if (current < 1) db.tx { v1().forEach(db::exec); db.exec("PRAGMA user_version = 1") }
         if (current < 2) db.tx { v2().forEach(db::exec); db.exec("PRAGMA user_version = 2") }
+        if (current < 3) db.tx { v3().forEach(db::exec); db.exec("PRAGMA user_version = 3") }
     }
 
     /**
@@ -39,6 +40,22 @@ object Schema {
             conversation TEXT NOT NULL DEFAULT '',
             returned INTEGER NOT NULL DEFAULT 0,
             outcome TEXT NOT NULL)""",
+    )
+
+    /** v3: owner-scheduled messages (see [Scheduler]). Separate from `outbox`, which is bot-reply machinery. */
+    fun v3(): List<String> = listOf(
+        """CREATE TABLE scheduled(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            uid TEXT NOT NULL UNIQUE,
+            conversation INTEGER NOT NULL,
+            body TEXT NOT NULL,
+            send_at INTEGER NOT NULL,
+            state TEXT NOT NULL,
+            detail TEXT NOT NULL DEFAULT '',
+            created INTEGER NOT NULL,
+            updated INTEGER NOT NULL)""",
+        "CREATE INDEX scheduled_due ON scheduled(state, send_at)",
+        "CREATE INDEX scheduled_conv ON scheduled(conversation, send_at)",
     )
 
     fun v1(): List<String> = listOf(
