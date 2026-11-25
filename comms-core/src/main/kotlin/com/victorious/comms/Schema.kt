@@ -19,9 +19,10 @@ object Schema {
     fun migrate(db: SqlDb) {
         val current = db.one("PRAGMA user_version")?.get("user_version")?.toIntOrNull() ?: 0
         require(current <= VERSION) { "Archive schema $current is newer than this build supports ($VERSION)." }
-        if (current < 1) db.tx { v1().forEach(db::exec) }
-        if (current < 2) db.tx { v2().forEach(db::exec) }
-        db.exec("PRAGMA user_version = $VERSION")
+        // Each step records its own version INSIDE its transaction: if the app dies between steps, the next start resumes at the
+        // next step instead of re-running CREATE TABLE on a database that already has the tables (which would fail forever).
+        if (current < 1) db.tx { v1().forEach(db::exec); db.exec("PRAGMA user_version = 1") }
+        if (current < 2) db.tx { v2().forEach(db::exec); db.exec("PRAGMA user_version = 2") }
     }
 
     /**
