@@ -22,7 +22,7 @@ class ArchiveTest {
         val db = JdbcSqlDb()
         Archive(db)
         Archive(db) // opening again is a no-op
-        assertEquals("2", db.rows("PRAGMA user_version")[0]["user_version"])
+        assertEquals(Schema.VERSION.toString(), db.rows("PRAGMA user_version")[0]["user_version"])
         db.exec("PRAGMA user_version = 99")
         try { Archive(db); fail("must not run against a newer schema") } catch (_: IllegalArgumentException) { }
     }

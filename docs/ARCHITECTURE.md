@@ -609,3 +609,12 @@ budgeted context from it, and only from conversations the owner switched on (see
   runs it off the main thread before registering and gives Linphone only the pinned chain as `rootCa`/`rootCaData` (CN check off; the pin identifies the server), so Linphone itself
   rejects any other certificate. Refusal text is fixed and never contains the pin. `capabilities.get` / `sms.capabilities.get` now also list the five `comms.*` archive ops (kind
   `read`, no confirm tap); listing is not access, the `ARCHIVE_READ` grant and the per-conversation switch still apply. Not run on a device.
+
+- **Scheduled messages and provider capabilities (Victorious Framework, 2026-11-25; schema v3).** Status: **core Implemented and JVM-tested (12 tests); NOT wired into `:app`; never run on a device.**
+  `Providers` (`Providers.kt`) says which provider labels can send; unknown labels can do nothing. `Scheduler` (`Scheduler.kt`) is storage and state for owner-typed messages: PENDING -> SENDING ->
+  SENT|FAILED|UNKNOWN, or CANCELLED|MISSED. Scheduling checks the provider, the length, a 10-second minimum lead, a one-year maximum and a cap of 200 pending. `claimDue()` marks anything more
+  than 15 minutes overdue MISSED instead of returning it, re-checks the provider, and hands out the rest as SENDING. `recoverAfterRestart()` turns SENDING into UNKNOWN (never resent);
+  `resolveUnknown()` records what the owner says happened. This is not automation: no `AutomationGate`, no bot rules. **Still to build (needs the Android SDK):** an `AlarmManager` trigger
+  (exact-alarm permission), a sender that calls `claimDue()` then `markSent`/`markFailed` and records the sent text through `LiveArchive`, and a screen. Scheduled rows are not part of the
+  encrypted backup, on purpose (a restore must not send old messages).
+
