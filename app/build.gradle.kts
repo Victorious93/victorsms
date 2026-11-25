@@ -89,6 +89,11 @@ kotlin {
     jvmToolchain(17)
 }
 
+tasks.withType<Test>().configureEach {
+    // Robolectric resolves its SDK jars at test runtime, outside Gradle's mavenCentral().
+    systemProperty("robolectric.dependency.repo.url", "https://repo.maven.apache.org/maven2")
+}
+
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
