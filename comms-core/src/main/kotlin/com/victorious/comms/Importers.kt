@@ -491,6 +491,11 @@ class ZipImporter : Importer {
                     val e = zin.nextEntry ?: break
                     if (e.isDirectory) continue
                     if (++entries > MAX_ENTRIES) { errors.add(ParseError(0, "Archive has more than $MAX_ENTRIES entries.")); break }
+                    val name = e.name.substringAfterLast('/')
+                    val lower = name.lowercase(Locale.ROOT)
+                    // Decide by name BEFORE reading: media (photos, voice notes, videos) is skipped without being buffered in memory,
+                    // so a large "export with media" cannot exhaust the phone's heap.
+                    if (!(lower.endsWith(".txt") || lower.endsWith(".csv") || lower.endsWith(".json") || lower.endsWith(".xml"))) { skipped++; continue }
                     val buf = java.io.ByteArrayOutputStream()
                     val chunk = ByteArray(8192)
                     while (true) {
@@ -500,9 +505,6 @@ class ZipImporter : Importer {
                         if (total > MAX_BYTES) { errors.add(ParseError(0, "Archive expands past the ${MAX_BYTES / 1_048_576} MB safety limit.")); return ParseResult(id, provider, null, msgs, errors, warnings) }
                         buf.write(chunk, 0, n)
                     }
-                    val name = e.name.substringAfterLast('/')
-                    val lower = name.lowercase(Locale.ROOT)
-                    if (!(lower.endsWith(".txt") || lower.endsWith(".csv") || lower.endsWith(".json") || lower.endsWith(".xml"))) { skipped++; continue }
                     val inner = ImportInput(name, buf.toByteArray())
                     val best = Importers.detect(inner).firstOrNull { it.first !is ZipImporter }
                     if (best == null) { warnings.add("'$name' was not recognised and was skipped."); continue }
