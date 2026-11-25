@@ -33,7 +33,7 @@ class SipStore(context: Context) {
     fun clear() { p.edit().clear().apply() }
 }
 
-/** Process-wide SIP state. The engine is the Linphone implementation when it was compiled in (`-PwithLinphone=true`), otherwise there is none and calls say so. */
+/** Process-wide SIP state. The engine is the Linphone implementation when it was compiled in (the voip edition), otherwise there is none and calls say so. */
 object SipCalls {
     private val _status = MutableStateFlow("not configured")
     val status: StateFlow<String> = _status
@@ -43,7 +43,7 @@ object SipCalls {
     @Synchronized fun start(ctx: Context) {
         val cfg = SipStore(ctx).load() ?: run { _status.value = "not configured"; return }
         if (engine == null) engine = runCatching { Class.forName("com.victorious.sms.voip.LinphoneSipEngine").getConstructor(Context::class.java).newInstance(ctx.applicationContext) as SipEngine }.getOrNull()
-        val e = engine ?: run { _status.value = "VoIP engine not included in this build (needs the Linphone build, see docs)"; return }
+        val e = engine ?: run { _status.value = "VoIP engine not included in this build (needs the voip edition, see docs/EDITIONS.md)"; return }
         e.listener = object : SipEngine.Listener {
             override fun onRegistration(state: String, reason: String?) { _status.value = "registration: ${state.lowercase()}" + (reason?.takeIf { it.isNotBlank() }?.let { " ($it)" } ?: "") }
             override fun onCall(state: String, peer: String?) { com.victorious.sms.phone.SipConnectionService.onEngineCall(ctx.applicationContext, state, peer) }

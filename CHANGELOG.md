@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed (voip pin, capabilities)
+- voip edition: `LinphoneSipEngine` now really pins the server certificate (SHA-256 of the certificate or its public key, fails closed, self-signed accepted only when pinned) and compiles against Linphone 5.3.x; the earlier draft did not compile and its pin was a no-op.
+- `capabilities.get` / `sms.capabilities.get` list the `comms.*` archive ops.
+
 ### Fixed (review, Nov 24)
 - Mail outbox: claiming an item is one atomic step, so two flushes at once (inbox poll + Send, or a double Send on a PC draft) or a double tap on
   *Send again anyway* sends once and no longer throws `IllegalStateException` (which crashed the screen). Compose/Outbox buttons never crash on a
