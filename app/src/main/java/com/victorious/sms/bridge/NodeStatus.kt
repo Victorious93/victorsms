@@ -59,6 +59,15 @@ object BridgeReads {
     val CAPABILITIES: Set<String> = setOf("capabilities.get", "sms.capabilities.get")
     val STATUS: Set<String> = setOf("node.status.get", "sms.status")
 
+    /**
+     * Every op this node answers. The archive ops are listed so a paired assistant can discover them; listing is not access:
+     * each one still needs the app's ARCHIVE_READ grant and the owner's per-conversation switch (all reads, no confirm tap).
+     */
+    fun descriptors(): List<CapabilityDescriptor> = listOf(
+        NodeStatusCapability.descriptor, SmsSendCapability.descriptor, SmsSendCapability.statusDescriptor, DraftCapability.deliver,
+        DraftCapability.status, ConfigCapabilities.export, ConfigCapabilities.import, ConfigOps.statusDescriptor,
+    ) + com.victorious.comms.ArchiveWire.OPS.map { CapabilityDescriptor(it, kind = "read", remoteAllowed = true, requiresConfirm = false) }
+
     /** The internal reply for a status or capabilities read, or null when [op] is not one of them. Never throws for those ops. */
     fun answer(context: Context, id: String, op: String): JSONObject? = when (op) {
         in STATUS -> reply(id, NodeStatusProvider(context, com.victorious.sms.fleet.NodeId.get(context)).snapshot().toJson())
@@ -67,10 +76,7 @@ object BridgeReads {
             JSONObject().put(
                 "ops",
                 JSONArray().apply {
-                    listOf(
-                        NodeStatusCapability.descriptor, SmsSendCapability.descriptor, SmsSendCapability.statusDescriptor, DraftCapability.deliver,
-                        DraftCapability.status, ConfigCapabilities.export, ConfigCapabilities.import, ConfigOps.statusDescriptor,
-                    ).forEach {
+                    descriptors().forEach {
                         put(JSONObject().put("name", it.name).put("kind", it.kind).put("remoteAllowed", it.remoteAllowed).put("requiresConfirm", it.requiresConfirm))
                     }
                 },
