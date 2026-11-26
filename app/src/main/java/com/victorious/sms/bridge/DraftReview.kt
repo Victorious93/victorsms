@@ -52,10 +52,10 @@ import com.victorious.comms.Providers
 import com.victorious.mail.Addr
 import com.victorious.mail.AttachmentData
 import com.victorious.mail.Draft
-import com.victorious.mail.MailAccount
 import com.victorious.mail.OutState
 import com.victorious.sms.archive.ArchiveRuntime
 import com.victorious.sms.mail.MailRepository
+import com.victorious.sms.mail.StoredAccount
 import com.victorious.sms.sms.SmsRepository
 import com.victorious.sms.ui.theme.Charcoal
 import com.victorious.sms.ui.theme.Cyan
@@ -189,7 +189,7 @@ class ReviewDraftActivity : ComponentActivity() {
             VictorSMSTheme {
                 val scope = rememberCoroutineScope()
                 var draft by remember { mutableStateOf<IncomingDraft?>(null) }
-                var accounts by remember { mutableStateOf(emptyList<MailAccount>()) }
+                var accounts by remember { mutableStateOf(emptyList<StoredAccount>()) }
                 var loading by remember { mutableStateOf(true) }
                 var busy by remember { mutableStateOf(false) }
                 var outcome by remember { mutableStateOf<DraftState?>(null) }
