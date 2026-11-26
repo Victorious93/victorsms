@@ -28,10 +28,12 @@ import kotlinx.coroutines.flow.update
 object ScheduledSms {
     internal const val ACTION_DUE = "com.victorious.sms.SCHEDULED_SMS_DUE"
     private const val NO_NUMBER = "This conversation has no single phone number to text."
-    private const val NOT_ACCEPTED = "Android did not accept the text. Check the thread before sending it again."
+    private const val UNCERTAIN = "Submission was interrupted. Check SMS activity before sending again."
 
-    /** Swapped in tests. Returns false when Android refused or the permission is missing. */
-    @Volatile internal var sender: (Context, String, String) -> Boolean = { c, to, body -> SmsRepository(c).send(to, body, Author.OWNER) }
+    /** Uses the schedule UID as the durable carrier-send request key. */
+    @Volatile internal var sender: (Context, String, String, Int?, String) -> SmsSubmission = { c, to, body, sim, key ->
+        SmsRepository(c).send(to, body, Author.OWNER, requestedSim = sim, requestKey = key)
+    }
 
     @Volatile private var recovered = false
     private val changes = MutableStateFlow(0L)
@@ -43,10 +45,13 @@ object ScheduledSms {
     fun canSend(context: Context): Boolean =
         context.checkSelfPermission(Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED
 
-    fun schedule(context: Context, conversation: Long, body: String, sendAt: Long): ScheduledMessage {
+    fun schedule(context: Context, conversation: Long, body: String, sendAt: Long, to: String, sim: Int?): ScheduledMessage {
         require(canSend(context)) { "Allow SMS sending in Android settings first." }
-        require(recipient(context, conversation) != null) { NO_NUMBER }
-        val m = scheduler(context).schedule(conversation, body, sendAt)
+        val saved = requireNotNull(recipient(context, conversation)) { NO_NUMBER }
+        val address = CarrierSms.normalize(to)
+        require(CarrierSms.normalize(saved) == address) { "The conversation's number changed. Review the recipient again." }
+        SmsSubscriptions(context).resolve(sim)
+        val m = scheduler(context).schedule(conversation, body, sendAt, smsAddress = address, smsSubscriptionId = sim)
         arm(context)
         changes.update { it + 1 }
         return m
@@ -61,24 +66,40 @@ object ScheduledSms {
     fun list(context: Context, conversation: Long?): List<ScheduledMessage> =
         scheduler(context).list(conversation, limit = Scheduler.MAX_PENDING.toInt() + 100)
 
+    fun carrierReceipt(context: Context, uid: String): SmsSendReceipt? = CarrierSms.receipt(context, carrierKey(uid))
+
+    private fun carrierKey(uid: String): String = "scheduled:$uid"
+
     /**
-     * Sends whatever is due. Returns how many texts Android accepted. Safe to call from any thread; calls are serialised.
+     * Transfers due texts to the carrier SMS journal. Returns how many were tracked. Calls are serialised.
      * A send in flight when the previous process died is turned into UNKNOWN once per process, before anything is claimed.
      */
     @Synchronized
     fun runDue(context: Context, scheduler: Scheduler = scheduler(context), archiveRecipient: (Long) -> String? = { recipient(context, it) }): Int {
         recover(scheduler)
-        var sent = 0
+        var submitted = 0
         for (m in scheduler.claimDue()) {
             val to = runCatching { archiveRecipient(m.conversation) }.getOrNull()
-            when {
-                to == null -> scheduler.markFailed(m.uid, NO_NUMBER)
-                runCatching { sender(context, to, m.body) }.getOrDefault(false) -> { scheduler.markSent(m.uid); sent++ }
-                else -> scheduler.markFailed(m.uid, NOT_ACCEPTED)
+            if (to == null) {
+                scheduler.markFailed(m.uid, NO_NUMBER)
+                continue
+            }
+            if (m.smsAddress != null && m.smsAddress != CarrierSms.normalize(to)) {
+                scheduler.markFailed(m.uid, "The conversation's number changed after scheduling.")
+                continue
+            }
+            val result = runCatching { sender(context, to, m.body, m.smsSubscriptionId, carrierKey(m.uid)) }.getOrNull()
+            when (result) {
+                is SmsSubmission.Tracked -> {
+                    scheduler.markSent(m.uid)
+                    submitted++
+                }
+                is SmsSubmission.Refused -> scheduler.markFailed(m.uid, result.reason)
+                null -> scheduler.markUnknown(m.uid, UNCERTAIN)
             }
         }
         changes.update { it + 1 }
-        return sent
+        return submitted
     }
 
     /** Sets (or clears) the one alarm for the earliest pending message. Never throws. */

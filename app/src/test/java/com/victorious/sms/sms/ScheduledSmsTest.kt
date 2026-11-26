@@ -5,6 +5,7 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import androidx.test.core.app.ApplicationProvider
 import com.victorious.comms.Archive
+import com.victorious.comms.Author
 import com.victorious.comms.Direction
 import com.victorious.comms.LiveIngest
 import com.victorious.comms.SchedState
@@ -34,12 +35,20 @@ class ScheduledSmsTest {
     private val archive = Archive(AndroidSqlDb(SQLiteDatabase.create(null)), clock = { now })
     private val scheduler = Scheduler(archive)
     private val sent = ArrayList<Pair<String, String>>()
+    private val routed = ArrayList<Pair<Int?, String>>()
     private val savedSender = ScheduledSms.sender
     private val min = 60_000L
 
     @Before fun fresh() {
         ScheduledSms.resetForTests()
-        ScheduledSms.sender = { _, to, body -> sent.add(to to body); true }
+        ScheduledSms.sender = { _, to, body, sim, key ->
+            sent.add(to to body)
+            routed.add(sim to key)
+            SmsSubmission.Tracked(SmsSendReceipt(
+                1, to, body, now, SmsSim(sim ?: 1, "Test SIM"), null, Author.OWNER,
+                1, 0, 0, 0, 0, null, false,
+            ))
+        }
     }
 
     @After fun restore() { ScheduledSms.sender = savedSender }
@@ -62,6 +71,23 @@ class ScheduledSmsTest {
         assertEquals(1, sent.size)
     }
 
+    @Test fun aScheduledTextUsesItsSavedSimAndStableSendKey() {
+        val c = conversation()
+        val item = scheduler.schedule(c, "Later", now + min, smsAddress = "+15550100142", smsSubscriptionId = 11)
+        now += 2 * min
+        assertEquals(1, run())
+        assertEquals(listOf(11 to "scheduled:${item.uid}"), routed)
+    }
+
+    @Test fun aChangedScheduledRecipientCannotReceiveTheText() {
+        val c = conversation()
+        val item = scheduler.schedule(c, "Later", now + min, smsAddress = "+15550100149")
+        now += 2 * min
+        assertEquals(0, run())
+        assertEquals(SchedState.FAILED, scheduler.get(item.uid)!!.state)
+        assertTrue(sent.isEmpty())
+    }
+
     @Test fun nothingIsSentBeforeItsTime() {
         scheduler.schedule(conversation(), "later", now + 30 * min)
         now += 10 * min
@@ -70,21 +96,21 @@ class ScheduledSmsTest {
     }
 
     @Test fun whenAndroidRefusesTheTextItIsMarkedFailedWithAnHonestReason() {
-        ScheduledSms.sender = { _, _, _ -> false }
+        ScheduledSms.sender = { _, _, _, _, _ -> SmsSubmission.Refused("The selected SIM is inactive.") }
         val m = scheduler.schedule(conversation(), "x", now + 5 * min)
         now += 6 * min
         assertEquals(0, run())
         val after = scheduler.get(m.uid)!!
         assertEquals(SchedState.FAILED, after.state)
-        assertTrue(after.detail.contains("Check the thread"))
+        assertEquals("The selected SIM is inactive.", after.detail)
     }
 
-    @Test fun aSenderThatThrowsIsAFailureNotACrash() {
-        ScheduledSms.sender = { _, _, _ -> error("telephony gone") }
+    @Test fun aSenderThatThrowsLeavesAnUnknownOutcome() {
+        ScheduledSms.sender = { _, _, _, _, _ -> error("telephony gone") }
         val m = scheduler.schedule(conversation(), "x", now + 5 * min)
         now += 6 * min
         assertEquals(0, run())
-        assertEquals(SchedState.FAILED, scheduler.get(m.uid)!!.state)
+        assertEquals(SchedState.UNKNOWN, scheduler.get(m.uid)!!.state)
     }
 
     @Test fun aConversationWithoutASingleNumberIsRefusedAndNothingIsSent() {

@@ -11,6 +11,7 @@ enum class SchedState {
 data class ScheduledMessage(
     val uid: String, val conversation: Long, val body: String, val sendAt: Long,
     val state: SchedState, val detail: String, val created: Long, val updated: Long,
+    val smsAddress: String? = null, val smsSubscriptionId: Int? = null,
 )
 
 /**
@@ -30,7 +31,9 @@ data class ScheduledMessage(
 class Scheduler(private val archive: Archive, private val graceMs: Long = DEFAULT_GRACE_MS) {
     private val db get() = archive.db
 
-    fun schedule(conversation: Long, body: String, sendAt: Long): ScheduledMessage = db.tx {
+    fun schedule(
+        conversation: Long, body: String, sendAt: Long, smsAddress: String? = null, smsSubscriptionId: Int? = null,
+    ): ScheduledMessage = db.tx {
         val conv = archive.conversation(conversation) ?: throw IllegalArgumentException("That conversation does not exist.")
         Providers.refusal(conv.provider, body)?.let { throw IllegalArgumentException(it) }
         val now = archive.clock()
@@ -38,8 +41,9 @@ class Scheduler(private val archive: Archive, private val graceMs: Long = DEFAUL
         require(db.count("SELECT COUNT(*) n FROM scheduled WHERE state='PENDING'") < MAX_PENDING) { "Too many scheduled messages ($MAX_PENDING). Cancel some first." }
         val uid = ByteArray(16).also { SecureRandom().nextBytes(it) }.joinToString("") { "%02x".format(it) }
         db.insert(
-            "INSERT INTO scheduled(uid,conversation,body,send_at,state,created,updated) VALUES(?,?,?,?,?,?,?)",
-            uid, conversation, body, sendAt, SchedState.PENDING.name, now, now,
+            """INSERT INTO scheduled(uid,conversation,body,send_at,state,created,updated,sms_address,sms_subscription_id)
+                VALUES(?,?,?,?,?,?,?,?,?)""",
+            uid, conversation, body, sendAt, SchedState.PENDING.name, now, now, smsAddress, smsSubscriptionId,
         )
         get(uid)!!
     }
@@ -97,6 +101,8 @@ class Scheduler(private val archive: Archive, private val graceMs: Long = DEFAUL
 
     fun markFailed(uid: String, detail: String): Boolean = finish(uid, SchedState.FAILED, detail)
 
+    fun markUnknown(uid: String, detail: String): Boolean = finish(uid, SchedState.UNKNOWN, detail)
+
     /** Call once at startup. A send in flight at a restart is UNKNOWN: the carrier may or may not have it. Never resent. */
     fun recoverAfterRestart(): Int = db.update(
         "UPDATE scheduled SET state='UNKNOWN', detail='The app stopped while sending; the message may or may not have been sent.', updated=? WHERE state='SENDING'",
@@ -120,6 +126,7 @@ class Scheduler(private val archive: Archive, private val graceMs: Long = DEFAUL
     private fun toMsg(r: Row) = ScheduledMessage(
         r.str("uid"), r.long("conversation"), r.str("body"), r.long("send_at"),
         SchedState.valueOf(r.str("state")), r.str("detail"), r.long("created"), r.long("updated"),
+        r["sms_address"], r["sms_subscription_id"]?.toIntOrNull(),
     )
 
     companion object {

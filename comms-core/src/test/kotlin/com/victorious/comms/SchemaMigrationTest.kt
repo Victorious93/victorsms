@@ -1,6 +1,7 @@
 package com.victorious.comms
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -32,5 +33,19 @@ class SchemaMigrationTest {
         val db = JdbcSqlDb()
         Schema.migrate(db); Schema.migrate(db)
         assertEquals(Schema.VERSION, version(db))
+    }
+
+    @Test fun v3ScheduledTextsSurviveTheSmsRouteMigration() {
+        val db = JdbcSqlDb()
+        (Schema.v1() + Schema.v2() + Schema.v3()).forEach(db::exec)
+        db.exec("PRAGMA user_version = 3")
+        db.exec("""INSERT INTO scheduled(uid,conversation,body,send_at,state,created,updated)
+            VALUES('queued',1,'See you soon',2000,'PENDING',1000,1000)""")
+        val scheduled = Scheduler(Archive(db)).get("queued")!!
+        assertEquals(Schema.VERSION, version(db))
+        assertEquals(SchedState.PENDING, scheduled.state)
+        assertEquals("See you soon", scheduled.body)
+        assertNull(scheduled.smsAddress)
+        assertNull(scheduled.smsSubscriptionId)
     }
 }

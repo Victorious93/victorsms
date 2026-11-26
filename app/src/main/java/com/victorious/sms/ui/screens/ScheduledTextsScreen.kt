@@ -41,9 +41,12 @@ import com.victorious.comms.Providers
 import com.victorious.comms.SchedState
 import com.victorious.comms.ScheduledMessage
 import com.victorious.sms.archive.ArchiveRuntime
+import com.victorious.sms.sms.CarrierSms
 import com.victorious.sms.sms.ScheduledSms
+import com.victorious.sms.sms.SmsSendReceipt
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.Instant
@@ -51,7 +54,7 @@ import java.time.LocalDateTime
 import java.time.ZoneId
 import java.util.Date
 
-private data class ScheduledRow(val message: ScheduledMessage, val title: String)
+private data class ScheduledRow(val message: ScheduledMessage, val title: String, val receipt: SmsSendReceipt?)
 
 @Composable
 fun ScheduledTextsScreen(conversation: Long?, onSaved: () -> Unit, onBack: () -> Unit) {
@@ -63,6 +66,7 @@ fun ScheduledTextsScreen(conversation: Long?, onSaved: () -> Unit, onBack: () ->
     var rows by remember { mutableStateOf<List<ScheduledRow>?>(null) }
     var recipient by remember { mutableStateOf<String?>(null) }
     var body by rememberSaveable(conversation) { mutableStateOf("") }
+    var sim by rememberSaveable(conversation) { mutableStateOf<Int?>(null) }
     var sendAt by rememberSaveable(conversation) {
         mutableLongStateOf((System.currentTimeMillis() / 60_000L + 10) * 60_000L)
     }
@@ -76,13 +80,18 @@ fun ScheduledTextsScreen(conversation: Long?, onSaved: () -> Unit, onBack: () ->
     )
 
     LaunchedEffect(conversation) {
-        ScheduledSms.revisions.collect {
+        ScheduledSms.revisions.combine(CarrierSms.revisions) { _, _ -> Unit }.collect {
             try {
                 val loaded = withContext(Dispatchers.IO) {
                     val archive = ArchiveRuntime.get(context).archive
                     val messages = ScheduledSms.list(context, conversation)
                     val titles = messages.map { it.conversation }.distinct().associateWith { archive.conversation(it)?.title.orEmpty() }
-                    conversation?.let(archive::smsRecipient) to messages.map { ScheduledRow(it, titles[it.conversation].orEmpty()) }
+                    conversation?.let(archive::smsRecipient) to messages.map { message ->
+                        val receipt = if (message.state == SchedState.SENT || message.state == SchedState.UNKNOWN) {
+                            ScheduledSms.carrierReceipt(context, message.uid)
+                        } else null
+                        ScheduledRow(message, titles[message.conversation].orEmpty(), receipt)
+                    }
                 }
                 recipient = loaded.first
                 rows = loaded.second
@@ -109,11 +118,13 @@ fun ScheduledTextsScreen(conversation: Long?, onSaved: () -> Unit, onBack: () ->
         val cid = conversation ?: return
         val text = body
         val whenMs = sendAt
+        val to = recipient ?: return
+        val selectedSim = sim
         busy = true
         error = null
         scope.launch {
             try {
-                withContext(Dispatchers.IO) { ScheduledSms.schedule(context, cid, text, whenMs) }
+                withContext(Dispatchers.IO) { ScheduledSms.schedule(context, cid, text, whenMs, to, selectedSim) }
                 body = ""
             } catch (e: CancellationException) {
                 throw e
@@ -127,6 +138,7 @@ fun ScheduledTextsScreen(conversation: Long?, onSaved: () -> Unit, onBack: () ->
         }
     }
 
+    val now = receiptClock(rows.orEmpty().mapNotNull { it.receipt })
     Column(Modifier.fillMaxSize().background(colors.background).safeDrawingPadding().imePadding()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onBack) { Text("Back") }
@@ -140,7 +152,8 @@ fun ScheduledTextsScreen(conversation: Long?, onSaved: () -> Unit, onBack: () ->
                 val to = recipient
                 if (to != null) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("To $to · Phone SMS (default SIM)", color = colors.onBackground)
+                        Text("To $to", color = colors.onBackground)
+                        SmsSimPicker(sim, onSelected = { sim = it }, enabled = !busy)
                         OutlinedTextField(
                             value = body,
                             onValueChange = { if (it.length <= limit) body = it },
@@ -183,7 +196,8 @@ fun ScheduledTextsScreen(conversation: Long?, onSaved: () -> Unit, onBack: () ->
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         HorizontalDivider()
                         if (row.title.isNotBlank()) Text(row.title, color = colors.onBackground, style = MaterialTheme.typography.titleSmall)
-                        Text("${timestamp.format(Date(message.sendAt))} · ${message.state.label()}", color = colors.onBackground)
+                        val status = row.receipt?.statusLabel(now) ?: message.state.label()
+                        Text("${timestamp.format(Date(message.sendAt))} · $status", color = colors.onBackground)
                         Text(message.body, color = colors.onBackground)
                         if (message.detail.isNotBlank()) Text(message.detail, color = colors.onBackground, style = MaterialTheme.typography.bodySmall)
                         if (message.state == SchedState.PENDING) {
@@ -202,6 +216,7 @@ fun ScheduledTextsScreen(conversation: Long?, onSaved: () -> Unit, onBack: () ->
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("To $recipient via phone SMS")
+                    Text(if (sim == null) "Uses the system default SIM at send time." else "Uses the SIM selected above.")
                     Text(timestamp.format(Date(sendAt)))
                     Text(body)
                 }

@@ -385,9 +385,18 @@ If the same message appears with different text, it is listed as a **conflict** 
 ### Schedule a text
 
 Open a saved, one-to-one SMS conversation and tap **Schedule a text**. Write the message, choose the date and time, and confirm the recipient and contents.
-VictorSMS uses the phone's default SMS SIM. Open **Settings → Scheduled texts** to check the queue and cancel pending texts. Android can delay the alarm.
+Choose an active SIM or use Android's default at send time. Open **Settings → Scheduled texts** to check the queue and cancel pending texts. Android can delay the alarm.
 Texts more than 15 minutes overdue are marked **Missed**. A text interrupted during submission shows **Unknown outcome** and stays out of the send queue.
-**Submitted to Android** confirms that Android accepted the request. Carrier delivery still needs a phone test.
+If the saved number changes or a chosen SIM becomes inactive, the scheduled text fails before dispatch.
+
+### Send a text and check its status
+
+Tap **New text** in the inbox. Enter a number and tap **Choose SIM** to list active SIMs or eSIMs. Android asks for phone permission when you open the SIM picker.
+VictorSMS remembers the choice for that number. You can select a different SIM for a scheduled text or when approving a draft or a paired app's request.
+
+Check the thread or **Settings → SMS activity** for the result. **Sent** confirms Android reported successful submission for every part. **Delivered** requires
+a positive carrier report for every part. **Partially sent** means some parts succeeded and some failed. If Android returns no conclusive result within two
+minutes, the text shows **Outcome unknown**. A late callback can update it. VictorSMS never automatically resends these messages.
 
 **Undo and delete:** each import has *Undo this import* (removes only the messages that import alone added). *Delete…* removes the messages and the
 search index, and lets you choose whether approved facts, summaries and the original files go too. Both ask first.
@@ -429,4 +438,4 @@ policy in droidcommand-AI before switching a private conversation on.
 Pair DroidCommand-AI under **Connected apps** and grant both **Archive read** and **Drafts**. Enable assistant access on the
 saved SMS conversation. An updated DroidCommand-AI can hand off a draft from that conversation. Open the notification or
 choose **Settings → Drafts to review**. Check the phone number and text, edit the message if needed, then select **Send** or
-**Decline**. The draft uses the phone's default SMS SIM. A change to the stored recipient or removal of a grant blocks submission.
+**Decline**. Choose the sending SIM before approval. A change to the stored recipient or removal of a grant blocks submission.

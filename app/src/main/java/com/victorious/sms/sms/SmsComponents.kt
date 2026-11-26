@@ -45,8 +45,17 @@ class HeadlessSmsSendService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val to = intent?.data?.schemeSpecificPart?.substringBefore("?")?.let(Uri::decode)
         val body = intent?.getStringExtra(Intent.EXTRA_TEXT)
-        if (!to.isNullOrBlank() && !body.isNullOrBlank()) SmsRepository(this).send(to, body, com.victorious.comms.Author.OWNER)
-        stopSelf(startId)
+        if (to.isNullOrBlank() || body.isNullOrBlank()) {
+            stopSelf(startId)
+        } else {
+            Thread {
+                try {
+                    SmsRepository(this).send(to, body, com.victorious.comms.Author.OWNER)
+                } finally {
+                    stopSelf(startId)
+                }
+            }.start()
+        }
         return START_NOT_STICKY
     }
 }

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Carrier SMS
+
+- Open **New text** from the inbox and choose a SIM for each conversation. Remote approvals, assistant drafts and scheduled texts offer their own SIM selection.
+- Track Android send callbacks and carrier delivery reports for every SMS segment. The conversation and **Settings → SMS activity** show sending, sent, partial, failed and unknown outcomes.
+- Preserve the selected recipient and SIM for a scheduled text. If the recipient changes or the selected SIM becomes inactive, the text is held back.
+
 ### Added (export a saved conversation)
 - Saved conversations → *Export…*: writes one conversation to a file you pick with the system file picker, as **CSV**, **JSON** (both read back by VictorSMS's own importer) or plain text. Streams in pages, so a huge conversation does not
   sit in memory. CSV carries a UTF-8 byte-order mark so Excel shows accents and emoji; an optional spreadsheet-safe mode puts `'` before text that starts with `= + - @`. Bot-drafted text can be left out. The file name has no name or number in it.

@@ -110,10 +110,17 @@ class BridgeService : Service() {
                 null
             }
             SmsSendCapability.STATUS_OP -> {
-                RemoteSmsQueue.ensureLoaded(applicationContext)
-                val st = RemoteSmsQueue.status(caller, params.optString("requestId"))
-                    ?: return err(id, "not_found")
-                ok(id, JSONObject().put("requestId", params.optString("requestId")).put("status", st.name.lowercase()))
+                worker.execute {
+                    val reply = try {
+                        RemoteSmsQueue.ensureLoaded(applicationContext)
+                        val state = RemoteSmsQueue.carrierStatus(applicationContext, caller, params.optString("requestId"))
+                        if (state == null) err(id, "not_found") else ok(id, state)
+                    } catch (_: Exception) {
+                        err(id, "internal_error")
+                    }
+                    deliver(reply)
+                }
+                null
             }
             ConfigCapabilities.EXPORT ->
                 ok(id, ConfigOps.export(packageName, AppConfigStore(applicationContext).snapshot()))
