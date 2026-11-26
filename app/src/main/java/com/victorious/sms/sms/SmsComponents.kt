@@ -51,6 +51,8 @@ class HeadlessSmsSendService : Service() {
             Thread {
                 try {
                     SmsRepository(this).send(to, body, com.victorious.comms.Author.OWNER)
+                } catch (_: Exception) {
+                    // The carrier journal keeps any dispatch that was already recorded.
                 } finally {
                     stopSelf(startId)
                 }

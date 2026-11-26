@@ -29,6 +29,7 @@ import com.victorious.sms.ui.theme.Charcoal
 import com.victorious.sms.ui.theme.Cyan
 import com.victorious.sms.ui.theme.Magenta
 import com.victorious.sms.ui.theme.VictorSMSTheme
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -78,6 +79,10 @@ class ApproveSendActivity : ComponentActivity() {
                             scope.launch {
                                 try {
                                     outcome = withContext(Dispatchers.IO) { RemoteSmsQueue.approve(applicationContext, id, selected) }
+                                } catch (e: CancellationException) {
+                                    throw e
+                                } catch (_: Exception) {
+                                    outcome = SendState.UNKNOWN
                                 } finally {
                                     busy = false
                                 }
