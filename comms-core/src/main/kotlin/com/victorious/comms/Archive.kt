@@ -125,6 +125,8 @@ class Archive(
      * name with no number, and anything ambiguous return null so a sender refuses instead of guessing.
      */
     fun smsRecipient(conversation: Long): String? {
+        val row = db.one("SELECT provider,is_group FROM conversations WHERE id=?", conversation) ?: return null
+        if (Providers.of(row.str("provider")).provider != "sms" || row.long("is_group") != 0L) return null
         val others = participants(conversation).filter { it.long("is_self") == 0L }
         if (others.size != 1) return null
         return others[0]["phone"]?.trim()?.takeIf { it.isNotEmpty() }

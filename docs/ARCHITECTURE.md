@@ -623,5 +623,6 @@ budgeted context from it, and only from conversations the owner switched on (see
   number with `Archive.smsRecipient`, sends through `SmsRepository.send(..., Author.OWNER)`, and records SENT or FAILED) and `arm` (one inexact alarm for the earliest pending message).
   `ScheduledSmsReceiver` (not exported) handles the alarm, `BOOT_COMPLETED` and `MY_PACKAGE_REPLACED`; `VictorApp` also re-arms at start, but only if the archive already exists. Because the alarm is
   inexact, Android may deliver it late; past the 15-minute grace the text is MISSED and the owner sees it. `SmsRepository.send` returns false on any exception, including one after the radio accepted the
-  text, so FAILED here means "check the thread before sending again", not "definitely not sent". **Still to build:** a screen to write, list and cancel scheduled texts, and a visible place for MISSED/UNKNOWN items.
+  text, so FAILED here means "check the thread before sending again". The schedule screen opens from a saved one-to-one SMS conversation.
+  **Settings → Scheduled texts** shows the queue and recent outcomes. App startup recovers interrupted SENDING rows even if there is no pending alarm.
 

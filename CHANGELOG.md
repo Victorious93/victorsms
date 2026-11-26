@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Added (scheduled texts screen)
+- Schedule a text from a saved one-to-one SMS conversation and review the recipient, body and time before queuing it.
+- Review scheduled, missed and uncertain texts in Settings and cancel pending texts. Active texts stay visible above recent history.
+- Recover interrupted sends when the app starts, even when no alarm is pending.
+
+### Fixed (Android CI)
+- Use Maven Central's canonical endpoint for Robolectric SDK downloads after its default endpoint returned HTTP 429.
+
 ### Added (scheduled texts on Android — engine only, no screen yet)
 - `ScheduledSms` + `ScheduledSmsReceiver`: an inexact alarm (`setAndAllowWhileIdle`, no exact-alarm permission) wakes the app, which sends due texts as the owner's own words
   through `SmsRepository`. A text more than 15 minutes late is marked MISSED, not sent; a send interrupted by a process death is UNKNOWN and never resent. Alarms are re-armed after a
