@@ -57,7 +57,6 @@ import com.victorious.sms.archive.ArchiveRuntime
 import com.victorious.sms.mail.MailRepository
 import com.victorious.sms.mail.StoredAccount
 import com.victorious.sms.sms.SmsRepository
-import com.victorious.sms.ui.theme.Charcoal
 import com.victorious.sms.ui.theme.Cyan
 import com.victorious.sms.ui.theme.Magenta
 import com.victorious.sms.ui.theme.VictorSMSTheme
@@ -144,6 +143,7 @@ object DraftReview {
 @Composable
 fun PendingDraftsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
+    val colors = MaterialTheme.colorScheme
     var drafts by remember { mutableStateOf<List<IncomingDraft>?>(null) }
     var error by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
@@ -156,21 +156,21 @@ fun PendingDraftsScreen(onBack: () -> Unit) {
             error = true
         }
     }
-    Column(Modifier.fillMaxSize().background(Charcoal).safeDrawingPadding().padding(16.dp)) {
+    Column(Modifier.fillMaxSize().background(colors.background).safeDrawingPadding().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onBack) { Text("Back") }
-            Text("Drafts to review", style = MaterialTheme.typography.titleLarge)
+            Text("Drafts to review", color = colors.onBackground, style = MaterialTheme.typography.titleLarge)
         }
         val pending = drafts
         when {
             error -> Text("The draft inbox could not be opened.", color = MaterialTheme.colorScheme.error)
-            pending == null -> Text("Loading drafts…")
-            pending.isEmpty() -> Text("There are no drafts waiting for review.")
+            pending == null -> Text("Loading drafts…", color = colors.onBackground)
+            pending.isEmpty() -> Text("There are no drafts waiting for review.", color = colors.onBackground)
             else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 items(pending, key = { DraftHandoff.key(it.caller, it.draftId) }) { draft ->
                     Column {
-                        Text(draft.origin.ifBlank { draft.caller.packageName }, fontWeight = FontWeight.Bold)
-                        Text("To ${draft.to.joinToString()}")
+                        Text(draft.origin.ifBlank { draft.caller.packageName }, color = colors.onBackground, fontWeight = FontWeight.Bold)
+                        Text("To ${draft.to.joinToString()}", color = colors.onBackground)
                         OutlinedButton(onClick = { context.startActivity(DraftReview.intent(context, draft)) }) { Text("Review") }
                     }
                 }
@@ -188,6 +188,7 @@ class ReviewDraftActivity : ComponentActivity() {
         setContent {
             VictorSMSTheme {
                 val scope = rememberCoroutineScope()
+                val colors = MaterialTheme.colorScheme
                 var draft by remember { mutableStateOf<IncomingDraft?>(null) }
                 var accounts by remember { mutableStateOf(emptyList<StoredAccount>()) }
                 var loading by remember { mutableStateOf(true) }
@@ -215,23 +216,24 @@ class ReviewDraftActivity : ComponentActivity() {
                     }
                 }
                 Column(
-                    Modifier.fillMaxSize().background(Charcoal).safeDrawingPadding().imePadding()
+                    Modifier.fillMaxSize().background(colors.background).safeDrawingPadding().imePadding()
                         .padding(20.dp).verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     val d = draft
                     if (loading) {
-                        Text("Loading draft…")
+                        Text("Loading draft…", color = colors.onBackground)
                         return@Column
                     }
                     if (d == null || outcome != DraftState.RECEIVED) {
-                        Text(status ?: when (outcome) {
+                        val message = status ?: when (outcome) {
                             DraftState.SUBMITTED -> "Draft submitted."
                             DraftState.DECLINED -> "Draft declined."
                             DraftState.UNKNOWN -> "Submission outcome unknown."
                             DraftState.FAILED -> "Submission failed."
                             else -> "This draft is no longer available."
-                        })
+                        }
+                        Text(message, color = colors.onBackground)
                         Button(onClick = { finish() }) { Text("Close") }
                         return@Column
                     }

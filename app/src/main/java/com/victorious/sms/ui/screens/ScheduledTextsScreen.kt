@@ -42,7 +42,6 @@ import com.victorious.comms.SchedState
 import com.victorious.comms.ScheduledMessage
 import com.victorious.sms.archive.ArchiveRuntime
 import com.victorious.sms.sms.ScheduledSms
-import com.victorious.sms.ui.theme.Charcoal
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -60,6 +59,7 @@ fun ScheduledTextsScreen(conversation: Long?, onSaved: () -> Unit, onBack: () ->
     val scope = rememberCoroutineScope()
     val zone = ZoneId.systemDefault()
     val limit = Providers.of("sms").maxBodyChars
+    val colors = MaterialTheme.colorScheme
     var rows by remember { mutableStateOf<List<ScheduledRow>?>(null) }
     var recipient by remember { mutableStateOf<String?>(null) }
     var body by rememberSaveable(conversation) { mutableStateOf("") }
@@ -127,10 +127,10 @@ fun ScheduledTextsScreen(conversation: Long?, onSaved: () -> Unit, onBack: () ->
         }
     }
 
-    Column(Modifier.fillMaxSize().background(Charcoal).safeDrawingPadding().imePadding()) {
+    Column(Modifier.fillMaxSize().background(colors.background).safeDrawingPadding().imePadding()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onBack) { Text("Back") }
-            Text("Scheduled texts", style = MaterialTheme.typography.titleLarge)
+            Text("Scheduled texts", color = colors.onBackground, style = MaterialTheme.typography.titleLarge)
         }
         LazyColumn(
             modifier = Modifier.fillMaxWidth().weight(1f).padding(horizontal = 16.dp),
@@ -140,7 +140,7 @@ fun ScheduledTextsScreen(conversation: Long?, onSaved: () -> Unit, onBack: () ->
                 val to = recipient
                 if (to != null) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("To $to · Phone SMS (default SIM)")
+                        Text("To $to · Phone SMS (default SIM)", color = colors.onBackground)
                         OutlinedTextField(
                             value = body,
                             onValueChange = { if (it.length <= limit) body = it },
@@ -151,7 +151,7 @@ fun ScheduledTextsScreen(conversation: Long?, onSaved: () -> Unit, onBack: () ->
                             enabled = !busy,
                             modifier = Modifier.fillMaxWidth(),
                         )
-                        Text(timestamp.format(Date(sendAt)))
+                        Text(timestamp.format(Date(sendAt)), color = colors.onBackground)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedButton(enabled = !busy, onClick = {
                                 DatePickerDialog(context, { _, year, month, day ->
@@ -164,28 +164,28 @@ fun ScheduledTextsScreen(conversation: Long?, onSaved: () -> Unit, onBack: () ->
                                 }, time.hour, time.minute, DateFormat.is24HourFormat(context)).show()
                             }) { Text("Time") }
                         }
-                        Text("Android may delay the alarm. Texts over 15 minutes late are marked Missed.",
+                        Text("Android may delay the alarm. Texts over 15 minutes late are marked Missed.", color = colors.onBackground,
                             style = MaterialTheme.typography.bodySmall)
                         Button(enabled = !busy && body.isNotBlank(), onClick = { confirm = true }) { Text("Schedule text") }
                     }
                 } else if (rows != null) {
-                    if (conversation != null) Text("This conversation has no single SMS recipient.")
+                    if (conversation != null) Text("This conversation has no single SMS recipient.", color = colors.onBackground)
                     OutlinedButton(onClick = onSaved) { Text("Open saved conversations") }
                 }
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
             val list = rows
             when {
-                list == null -> item { Text("Loading scheduled texts…") }
-                list.isEmpty() -> item { Text("No scheduled texts yet.") }
+                list == null -> item { Text("Loading scheduled texts…", color = colors.onBackground) }
+                list.isEmpty() -> item { Text("No scheduled texts yet.", color = colors.onBackground) }
                 else -> items(list, key = { it.message.uid }) { row ->
                     val message = row.message
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         HorizontalDivider()
-                        if (row.title.isNotBlank()) Text(row.title, style = MaterialTheme.typography.titleSmall)
-                        Text("${timestamp.format(Date(message.sendAt))} · ${message.state.label()}")
-                        Text(message.body)
-                        if (message.detail.isNotBlank()) Text(message.detail, style = MaterialTheme.typography.bodySmall)
+                        if (row.title.isNotBlank()) Text(row.title, color = colors.onBackground, style = MaterialTheme.typography.titleSmall)
+                        Text("${timestamp.format(Date(message.sendAt))} · ${message.state.label()}", color = colors.onBackground)
+                        Text(message.body, color = colors.onBackground)
+                        if (message.detail.isNotBlank()) Text(message.detail, color = colors.onBackground, style = MaterialTheme.typography.bodySmall)
                         if (message.state == SchedState.PENDING) {
                             TextButton(enabled = !busy, onClick = { cancelling = message }) { Text("Cancel text") }
                         }
