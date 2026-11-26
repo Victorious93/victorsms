@@ -72,6 +72,16 @@ class PairingPolicyTest {
         assertEquals(AuthDecision.Denied("not_paired"), PairingPolicy.decide(true, listOf(CallerIdentity("evil.app", cert)), listOf(granted), "comms.conversation.read").decision)
     }
 
+    @Test fun aSavedConversationDraftRequiresBothDraftAndArchiveGrants() {
+        val op = DraftCapability.OP_FROM_ARCHIVE
+        for (group in listOf(OpGroup.DRAFT, OpGroup.ARCHIVE_READ)) {
+            val partial = approved.copy(groups = setOf(group))
+            assertEquals(AuthDecision.Denied("permission_denied"), PairingPolicy.decide(true, listOf(id), listOf(partial), op).decision)
+        }
+        val granted = approved.copy(groups = setOf(OpGroup.DRAFT, OpGroup.ARCHIVE_READ))
+        assertTrue(PairingPolicy.decide(true, listOf(id), listOf(granted), op).decision is AuthDecision.Allowed)
+    }
+
     @Test fun certFormatNormalized() =
         assertTrue(PairingPolicy.matches(approved, CallerIdentity("ai.droidcommand.app", "aabbcc")))
 }

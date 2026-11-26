@@ -302,10 +302,11 @@ private class Detail(
     val conflicts: List<Pair<Row, StoredMessage?>>,
     /** Newest requests from paired assistant apps about this conversation: who and when, never what was read. */
     val access: List<Row> = emptyList(),
+    val canScheduleSms: Boolean = false,
 )
 
 @Composable
-fun SavedConversationScreen(id: Long, onUpdate: () -> Unit, onBack: () -> Unit) {
+fun SavedConversationScreen(id: Long, onUpdate: () -> Unit, onBack: () -> Unit, onSchedule: (() -> Unit)? = null) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val h = remember { ArchiveRuntime.get(ctx) }
@@ -340,6 +341,7 @@ fun SavedConversationScreen(id: Long, onUpdate: () -> Unit, onBack: () -> Unit) 
                 conv, h.archive.messages(id, 40), h.engine.history(id),
                 h.archive.openConflicts(id).map { it to it["message"]?.toLongOrNull()?.let(h.archive::message) },
                 conv?.let { c -> h.archive.recentAccess(300).filter { it["conversation"] == c.uid }.take(5) }.orEmpty(),
+                canScheduleSms = h.archive.smsRecipient(id) != null,
             )
         }
     }
@@ -358,6 +360,9 @@ fun SavedConversationScreen(id: Long, onUpdate: () -> Unit, onBack: () -> Unit) 
             Button(onClick = onUpdate) { Text("Update conversation") }
             OutlinedButton(onClick = { exportOpen = true }) { Text("Export…") }
             OutlinedButton(onClick = { confirmDelete = true }) { Text("Delete…") }
+        }
+        if (d.canScheduleSms && onSchedule != null) {
+            OutlinedButton(onClick = onSchedule) { Text("Schedule a text") }
         }
         note?.let { ImportNote(it, Cyan) }
 

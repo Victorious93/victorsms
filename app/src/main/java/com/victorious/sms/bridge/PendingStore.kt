@@ -17,7 +17,7 @@ interface PendingStore {
 }
 
 /** AES-256-GCM EncryptedSharedPreferences (key in Android Keystore). */
-class EncryptedPendingStore(context: Context, name: String) : PendingStore {
+class EncryptedPendingStore(context: Context, name: String, private val durableWrites: Boolean = false) : PendingStore {
     private val prefs = EncryptedSharedPreferences.create(
         context, name,
         MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build(),
@@ -25,7 +25,11 @@ class EncryptedPendingStore(context: Context, name: String) : PendingStore {
         EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
     )
     override fun loadAll(): Map<String, String> = prefs.all.mapNotNull { (k, v) -> (v as? String)?.let { k to it } }.toMap()
-    override fun put(id: String, json: String) { prefs.edit().putString(id, json).apply() }
+    override fun put(id: String, json: String) {
+        val edit = prefs.edit().putString(id, json)
+        if (durableWrites) check(edit.commit()) { "Could not save the draft." }
+        else edit.apply()
+    }
     override fun remove(id: String) { prefs.edit().remove(id).apply() }
 }
 

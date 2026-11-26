@@ -2,13 +2,18 @@ package com.victorious.sms.sms
 
 import android.app.AlarmManager
 import android.app.PendingIntent
+import android.Manifest
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import com.victorious.comms.Author
 import com.victorious.comms.ScheduledMessage
 import com.victorious.comms.Scheduler
 import com.victorious.sms.archive.ArchiveRuntime
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 
 /**
  * Victorious Framework: owner-scheduled texts on Android. The rules live in `comms-core` ([Scheduler]); this is only the
@@ -29,43 +34,62 @@ object ScheduledSms {
     @Volatile internal var sender: (Context, String, String) -> Boolean = { c, to, body -> SmsRepository(c).send(to, body, Author.OWNER) }
 
     @Volatile private var recovered = false
+    private val changes = MutableStateFlow(0L)
+    val revisions = changes.asStateFlow()
+
+    fun recipient(context: Context, conversation: Long): String? =
+        ArchiveRuntime.get(context).archive.smsRecipient(conversation)
+
+    fun canSend(context: Context): Boolean =
+        context.checkSelfPermission(Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED
 
     fun schedule(context: Context, conversation: Long, body: String, sendAt: Long): ScheduledMessage {
-        val m = scheduler(context).schedule(conversation, body, sendAt) // throws IllegalArgumentException with a sentence for the owner
+        require(canSend(context)) { "Allow SMS sending in Android settings first." }
+        require(recipient(context, conversation) != null) { NO_NUMBER }
+        val m = scheduler(context).schedule(conversation, body, sendAt)
         arm(context)
+        changes.update { it + 1 }
         return m
     }
 
-    fun cancel(context: Context, uid: String): Boolean = scheduler(context).cancel(uid).also { arm(context) }
+    fun cancel(context: Context, uid: String): Boolean =
+        scheduler(context).cancel(uid).also {
+            arm(context)
+            changes.update { it + 1 }
+        }
 
-    fun list(context: Context, conversation: Long? = null): List<ScheduledMessage> = scheduler(context).list(conversation)
+    fun list(context: Context, conversation: Long?): List<ScheduledMessage> =
+        scheduler(context).list(conversation, limit = Scheduler.MAX_PENDING.toInt() + 100)
 
     /**
      * Sends whatever is due. Returns how many texts Android accepted. Safe to call from any thread; calls are serialised.
      * A send in flight when the previous process died is turned into UNKNOWN once per process, before anything is claimed.
      */
     @Synchronized
-    fun runDue(context: Context, scheduler: Scheduler = scheduler(context), archiveRecipient: (Long) -> String? = { recipientOf(context, it) }): Int {
-        if (!recovered) { scheduler.recoverAfterRestart(); recovered = true }
+    fun runDue(context: Context, scheduler: Scheduler = scheduler(context), archiveRecipient: (Long) -> String? = { recipient(context, it) }): Int {
+        recover(scheduler)
         var sent = 0
         for (m in scheduler.claimDue()) {
-            val to = archiveRecipient(m.conversation)
+            val to = runCatching { archiveRecipient(m.conversation) }.getOrNull()
             when {
                 to == null -> scheduler.markFailed(m.uid, NO_NUMBER)
                 runCatching { sender(context, to, m.body) }.getOrDefault(false) -> { scheduler.markSent(m.uid); sent++ }
                 else -> scheduler.markFailed(m.uid, NOT_ACCEPTED)
             }
         }
+        changes.update { it + 1 }
         return sent
     }
 
     /** Sets (or clears) the one alarm for the earliest pending message. Never throws. */
+    @Synchronized
     fun arm(context: Context, scheduler: Scheduler? = null) {
         runCatching {
             val app = context.applicationContext
             // Nothing can be scheduled before the archive exists; do not create it just to find that out.
             if (scheduler == null && !app.getDatabasePath(ArchiveRuntime.DB_NAME).exists()) return
             val sched = scheduler ?: scheduler(app)
+            recover(sched)
             val alarms = app.getSystemService(AlarmManager::class.java) ?: return
             val pi = alarmIntent(app)
             val next = sched.nextDue()
@@ -76,13 +100,19 @@ object ScheduledSms {
 
     internal fun resetForTests() { recovered = false }
 
+    private fun recover(scheduler: Scheduler) {
+        if (recovered) return
+        val count = scheduler.recoverAfterRestart()
+        recovered = true
+        if (count > 0) changes.update { it + 1 }
+    }
+
     private fun alarmIntent(app: Context): PendingIntent = PendingIntent.getBroadcast(
         app, 0, Intent(app, ScheduledSmsReceiver::class.java).setAction(ACTION_DUE), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
 
     private fun scheduler(context: Context) = Scheduler(ArchiveRuntime.get(context).archive)
 
-    private fun recipientOf(context: Context, conversation: Long): String? = ArchiveRuntime.get(context).archive.smsRecipient(conversation)
 }
 
 /** Fires when a scheduled text is due, and after a reboot or app update (alarms are lost then). Not exported. */

@@ -382,6 +382,13 @@ recognised and not duplicated; two identical texts ("ok", "ok") are kept as two;
 times in the new file look uniformly shifted (a time-zone or daylight-saving difference), you are offered a shift to tick; it is never applied for you.
 If the same message appears with different text, it is listed as a **conflict** and nothing is overwritten: choose *Keep saved*, *Use new* or *Keep both*.
 
+### Schedule a text
+
+Open a saved, one-to-one SMS conversation and tap **Schedule a text**. Write the message, choose the date and time, and confirm the recipient and contents.
+VictorSMS uses the phone's default SMS SIM. Open **Settings → Scheduled texts** to check the queue and cancel pending texts. Android can delay the alarm.
+Texts more than 15 minutes overdue are marked **Missed**. A text interrupted during submission shows **Unknown outcome** and stays out of the send queue.
+**Submitted to Android** confirms that Android accepted the request. Carrier delivery still needs a phone test.
+
 **Undo and delete:** each import has *Undo this import* (removes only the messages that import alone added). *Delete…* removes the messages and the
 search index, and lets you choose whether approved facts, summaries and the original files go too. Both ask first.
 
@@ -416,3 +423,10 @@ change or delete anything through this, and it can only ever see conversations y
 Upgrading VictorSMS, or restoring an older backup, leaves every conversation switched **off**. Deleting a conversation also removes its request log.
 Anything the assistant reads goes wherever your droidcommand-AI inference policy sends it (this device, your PC, or a cloud model you confirmed); check that
 policy in droidcommand-AI before switching a private conversation on.
+
+### Review an assistant draft
+
+Pair DroidCommand-AI under **Connected apps** and grant both **Archive read** and **Drafts**. Enable assistant access on the
+saved SMS conversation. An updated DroidCommand-AI can hand off a draft from that conversation. Open the notification or
+choose **Settings → Drafts to review**. Check the phone number and text, edit the message if needed, then select **Send** or
+**Decline**. The draft uses the phone's default SMS SIM. A change to the stored recipient or removal of a grant blocks submission.

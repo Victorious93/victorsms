@@ -10,10 +10,12 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.victorious.sms.archive.PendingShare
+import com.victorious.sms.bridge.PendingDraftsScreen
 import com.victorious.sms.ui.screens.ConnectedAppsScreen
 import com.victorious.sms.ui.screens.ImportWizardScreen
 import com.victorious.sms.ui.screens.SavedConversationScreen
 import com.victorious.sms.ui.screens.SavedConversationsScreen
+import com.victorious.sms.ui.screens.ScheduledTextsScreen
 import com.victorious.sms.ui.screens.HelpScreen
 import com.victorious.sms.ui.screens.SettingsScreen
 import com.victorious.sms.ui.screens.BlockingScreen
@@ -70,6 +72,8 @@ class MainActivity : ComponentActivity() {
                                 "SIP / VoIP (own server)" to { nav.navigate("sip") },
                                 "Email accounts" to { nav.navigate("mail_accounts") },
                                 "Email outbox" to { nav.navigate("mail_outbox") },
+                                "Scheduled texts" to { nav.navigate("scheduled") },
+                                "Drafts to review" to { nav.navigate("pending_drafts") },
                                 "Saved conversations (import)" to { nav.navigate("saved") },
                                 "Blocking & spam" to { nav.navigate("blocking") },
                                 "Spam folder" to { nav.navigate("spam") },
@@ -83,6 +87,7 @@ class MainActivity : ComponentActivity() {
                             ),
                         ) { nav.popBackStack() }
                     }
+                    composable("pending_drafts") { PendingDraftsScreen { nav.popBackStack() } }
                     composable("saved") {
                         SavedConversationsScreen(
                             onOpen = { nav.navigate("saved/$it") },
@@ -92,7 +97,19 @@ class MainActivity : ComponentActivity() {
                     }
                     composable("saved/{id}") { e ->
                         val cid = e.arguments?.getString("id")?.toLongOrNull() ?: -1L
-                        SavedConversationScreen(cid, onUpdate = { nav.navigate("import/$cid") }, onBack = { nav.popBackStack() })
+                        SavedConversationScreen(
+                            cid,
+                            onUpdate = { nav.navigate("import/$cid") },
+                            onBack = { nav.popBackStack() },
+                            onSchedule = { nav.navigate("scheduled/$cid") },
+                        )
+                    }
+                    composable("scheduled") {
+                        ScheduledTextsScreen(null, onSaved = { nav.navigate("saved") }, onBack = { nav.popBackStack() })
+                    }
+                    composable("scheduled/{id}") { e ->
+                        val cid = e.arguments?.getString("id")?.toLongOrNull()
+                        ScheduledTextsScreen(cid, onSaved = { nav.navigate("saved") }, onBack = { nav.popBackStack() })
                     }
                     composable("import/{target}") { e ->
                         val target = e.arguments?.getString("target")?.toLongOrNull()?.takeIf { it >= 0 }

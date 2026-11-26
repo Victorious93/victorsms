@@ -95,18 +95,19 @@ class BridgeService : Service() {
                     is RemoteSmsQueue.Result.Rejected -> err(id, r.code)
                 }
             }
-            DraftCapability.OP_DELIVER -> {
-                DraftReview.ensureLoaded(applicationContext)
-                when (val r = DraftHandoff.deliver(caller, params, System.currentTimeMillis()) { DraftReview.notify(applicationContext, it) }) {
-                    is DraftHandoff.Result.Accepted -> ok(id, JSONObject().put("draftId", r.draftId).put("state", r.state.name.lowercase()))
-                    is DraftHandoff.Result.Rejected -> err(id, r.code)
+            DraftCapability.OP_DELIVER, DraftCapability.OP_FROM_ARCHIVE, DraftCapability.OP_STATUS -> {
+                worker.execute {
+                    val reply = try {
+                        when (val decision = authorizer.authorize(uid, op)) {
+                            is AuthDecision.Allowed -> draftReply(id, decision.caller, op, params)
+                            is AuthDecision.Denied -> err(id, decision.code)
+                        }
+                    } catch (_: Exception) {
+                        err(id, "internal_error")
+                    }
+                    deliver(reply)
                 }
-            }
-            DraftCapability.OP_STATUS -> {
-                DraftReview.ensureLoaded(applicationContext)
-                val st = DraftHandoff.status(caller, params.optString("draftId")) ?: return err(id, "not_found")
-                val d = DraftHandoff.get(caller.packageName, params.optString("draftId"))
-                ok(id, JSONObject().put("draftId", params.optString("draftId")).put("state", st.name.lowercase()).apply { d?.detail?.let { put("detail", it.take(200)) } })
+                null
             }
             SmsSendCapability.STATUS_OP -> {
                 RemoteSmsQueue.ensureLoaded(applicationContext)
@@ -151,6 +152,30 @@ class BridgeService : Service() {
                 null
             }
             else -> err(id, "not_implemented")
+        }
+    }
+
+    private fun draftReply(id: String, caller: CallerIdentity, op: String, params: JSONObject): JSONObject {
+        val context = applicationContext
+        DraftReview.ensureLoaded(context)
+        val now = System.currentTimeMillis()
+        if (op == DraftCapability.OP_STATUS) {
+            val draftId = params.optString("draftId")
+            val state = DraftHandoff.status(caller, draftId, now) ?: return err(id, "not_found")
+            return ok(id, JSONObject().put("draftId", draftId).put("state", state.name.lowercase()).apply {
+                DraftHandoff.get(caller, draftId)?.detail?.let { put("detail", it.take(200)) }
+            })
+        }
+        val notify = { draft: IncomingDraft -> DraftReview.notify(context, draft) }
+        val result = if (op == DraftCapability.OP_FROM_ARCHIVE) {
+            DraftHandoff.deliverArchive(ArchiveRuntime.get(context).archive, caller, params, now, notify)
+        } else {
+            DraftHandoff.deliver(caller, params, now, notify = notify)
+        }
+        return when (result) {
+            is DraftHandoff.Result.Accepted ->
+                ok(id, JSONObject().put("draftId", result.draftId).put("state", result.state.name.lowercase()))
+            is DraftHandoff.Result.Rejected -> err(id, result.code)
         }
     }
 

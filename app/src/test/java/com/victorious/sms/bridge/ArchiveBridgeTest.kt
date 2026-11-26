@@ -1,8 +1,10 @@
 package com.victorious.sms.bridge
 
 import androidx.test.core.app.ApplicationProvider
+import com.victorious.comms.Direction
 import com.victorious.comms.ImportInput
 import com.victorious.comms.ImportRequest
+import com.victorious.comms.LiveIngest
 import com.victorious.comms.ParseOptions
 import com.victorious.sms.archive.ArchiveRuntime
 import org.json.JSONObject
@@ -62,6 +64,41 @@ class ArchiveBridgeTest {
         """{"protocol_major":1,"request_id":"dca-list-1","node_id":"victorsms","ok":true,"result":{"conversations":[],"count":0,"truncated":false}}""",
         ask(wire("comms.conversations.list", "dca-list-1")),
     )
+
+    @Test fun anArchiveDraftUsesTheSharedSmsConversationRecipientAndWaitsForReview() {
+        val archive = ArchiveRuntime.get(ctx).archive
+        val from = "+15550100142"
+        val now = System.currentTimeMillis()
+        LiveIngest(archive).record(from, "Hello", now, Direction.IN)
+        val conversation = archive.conversations().single()
+        val identity = CallerIdentity(caller, "AA")
+        val params = JSONObject().put("conversation", conversation.uid).put("draftId", "reply-1")
+            .put("body", "Good to hear from you").put("to", org.json.JSONArray(listOf("+15550100143")))
+        DraftHandoff.attachStore(MemoryPendingStore())
+        assertEquals(
+            DraftHandoff.Result.Rejected("not_found"),
+            DraftHandoff.deliverArchive(archive, identity, params, now) { error("Unshared draft") },
+        )
+        archive.setAssistantAccess(conversation.id, true)
+        assertEquals(
+            DraftHandoff.Result.Accepted("reply-1", DraftState.RECEIVED),
+            DraftHandoff.deliverArchive(archive, identity, params, now) { },
+        )
+        assertEquals(conversation.uid, DraftHandoff.get(identity, "reply-1")?.conversation)
+        assertEquals(listOf(from), DraftHandoff.get(identity, "reply-1")?.to)
+        assertEquals(DraftState.RECEIVED, DraftHandoff.status(identity, "reply-1", now))
+    }
+
+    @Test fun aSharedHistoryOnlyConversationCannotCreateAnSmsDraft() {
+        val (id, uid) = seed()
+        val archive = ArchiveRuntime.get(ctx).archive
+        archive.setAssistantAccess(id, true)
+        val params = JSONObject().put("conversation", uid).put("draftId", "historical-reply").put("body", "hi")
+        assertEquals(
+            DraftHandoff.Result.Rejected("no_sms_recipient"),
+            DraftHandoff.deliverArchive(archive, CallerIdentity(caller, "AA"), params, System.currentTimeMillis()) { error("History-only draft") },
+        )
+    }
 
     @Test fun anUnsharedAndAMissingConversationGiveTheSameFrameWhichMatchesThePinnedOne() {
         val (_, uid) = seed()

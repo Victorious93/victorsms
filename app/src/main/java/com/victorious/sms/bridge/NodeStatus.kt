@@ -65,7 +65,7 @@ object BridgeReads {
      */
     fun descriptors(): List<CapabilityDescriptor> = listOf(
         NodeStatusCapability.descriptor, SmsSendCapability.descriptor, SmsSendCapability.statusDescriptor, DraftCapability.deliver,
-        DraftCapability.status, ConfigCapabilities.export, ConfigCapabilities.import, ConfigOps.statusDescriptor,
+        DraftCapability.fromArchive, DraftCapability.status, ConfigCapabilities.export, ConfigCapabilities.import, ConfigOps.statusDescriptor,
     ) + com.victorious.comms.ArchiveWire.OPS.map { CapabilityDescriptor(it, kind = "read", remoteAllowed = true, requiresConfirm = false) }
 
     /** The internal reply for a status or capabilities read, or null when [op] is not one of them. Never throws for those ops. */

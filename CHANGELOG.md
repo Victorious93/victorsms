@@ -9,12 +9,26 @@
 - The file is **not encrypted**; the dialog says so. 8 `comms-core` tests (round trip of CSV and JSON with commas, quotes, newlines, emoji and a leading `=`; paging across 1,203 messages sharing one timestamp) and 4 app tests. Mutation-checked in
   `comms-core`. The app screen and the file picker have never run on a device.
 
-### Added (scheduled texts on Android — engine only, no screen yet)
+### Added (assistant draft review)
+- Accept drafts by shared conversation ID from paired DroidCommand-AI with both **Archive read** and **Drafts** grants.
+  VictorSMS resolves the address of an eligible native SMS conversation locally and presents the editable draft for approval.
+- **Settings → Drafts to review** opens waiting drafts independently of notifications.
+- A draft interrupted during submission opens with an unknown outcome after restart and cannot submit again.
+
+### Added (scheduled texts screen)
+- Schedule a text from a saved one-to-one SMS conversation and review the recipient, body and time before queuing it.
+- Review scheduled, missed and uncertain texts in Settings and cancel pending texts. Active texts stay visible above recent history.
+- Recover interrupted sends when the app starts, even when no alarm is pending.
+
+### Fixed (Android CI)
+- Use Maven Central's canonical endpoint for Robolectric SDK downloads after its default endpoint returned HTTP 429.
+
+### Added (scheduled texts on Android)
 - `ScheduledSms` + `ScheduledSmsReceiver`: an inexact alarm (`setAndAllowWhileIdle`, no exact-alarm permission) wakes the app, which sends due texts as the owner's own words
   through `SmsRepository`. A text more than 15 minutes late is marked MISSED, not sent; a send interrupted by a process death is UNKNOWN and never resent. Alarms are re-armed after a
   reboot, an app update and at app start. New permission: `RECEIVE_BOOT_COMPLETED`.
 - `Archive.smsRecipient(conversation)`: the one phone number a conversation can be texted at; groups and name-only conversations return null and the text fails instead of guessing.
-- 1 new `comms-core` test and 8 new app tests (Robolectric, fake sender). **There is no way to schedule a text yet (no screen), and nothing has run on a device or fired a real alarm.**
+- Tests cover the scheduler and Android alarm registration with a fake sender. The alarm and carrier submission still need a phone test.
 
 ### Added (scheduled messages, provider capabilities — `comms-core` only)
 - `Scheduler`: owner-written messages that go out later. Archive schema **v3** adds a `scheduled` table. A message that comes due while the phone could not send (more than 15 min late)
