@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+Nothing yet.
+
+## 0.3.0 — debug-signed pre-release, 26 November 2026 (commit `b5c0c4a`)
+
+Everything below shipped in this pre-release. None of it has run on a real device.
+
 ### Added (export a saved conversation)
 - Saved conversations → *Export…*: writes one conversation to a file you pick with the system file picker, as **CSV**, **JSON** (both read back by VictorSMS's own importer) or plain text. Streams in pages, so a huge conversation does not
   sit in memory. CSV carries a UTF-8 byte-order mark so Excel shows accents and emoji; an optional spreadsheet-safe mode puts `'` before text that starts with `= + - @`. Bot-drafted text can be left out. The file name has no name or number in it.
@@ -35,8 +41,7 @@
   becomes MISSED and is never sent late; a send in flight at a restart becomes UNKNOWN and is never resent; sending is refused if the conversation's provider cannot send. It stores and
   decides; it does not send.
 - `Providers`: one table of what each provider label can do (`sms`, `matrix`, `email` can send; `whatsapp`, `textnow`, `paste`, `zip` are history only; unknown labels get nothing).
-- 12 new `comms-core` tests (99 total, all pass). **Not wired into the app: no alarm, no sender, no screen. Never run on a device.** `:app` could not be compiled in the environment
-  that wrote this (no Android SDK), so no Android code was touched.
+- 12 new `comms-core` tests (99 total, all pass). When this entry was written it was not yet wired into the app; the Android alarm and sender and the screen are the entries above, in the same release. **Never run on a device.**
 
 ### Fixed (voip pin, capabilities)
 - voip edition: `LinphoneSipEngine` now really pins the server certificate (SHA-256 of the certificate or its public key, fails closed, self-signed accepted only when pinned) and compiles against Linphone 5.3.x; the earlier draft did not compile and its pin was a no-op.
@@ -82,4 +87,4 @@
 
 ### Not done (see `docs/ARCHITECTURE.md` §24)
 - Sending/drafting through the connector, encrypted-backup screen,
-  provider capability model, scheduled messages, voice messages, interactive AI calls. HTML and TextNow-specific import are unsupported.
+  voice messages, interactive AI calls. HTML and TextNow-specific import are unsupported.
