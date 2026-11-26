@@ -137,4 +137,21 @@ class SchedulerTest {
         assertNull(a.smsRecipient(named))
         assertNull(a.smsRecipient(9999))
     }
+
+    @Test fun aGroupOrHistoryOnlyProviderCannotResolveASmsRecipient() {
+        val group = a.createConversation("sms", "", "group", "Group", true)
+        val imported = a.createConversation("textnow", "", "history", "TextNow history", false)
+        for (conversation in listOf(group, imported)) {
+            a.upsertParticipant(conversation, "p:5550100199", "Peer", "5550100199", false)
+            assertNull(a.smsRecipient(conversation))
+        }
+    }
+
+    @Test fun activeTextsAreVisibleAheadOfOlderHistory() {
+        val done = s.schedule(sms, "old", now + min)
+        s.cancel(done.uid)
+        val active = s.schedule(sms, "upcoming", now + 2 * min)
+        assertEquals(listOf(active.uid), s.list(limit = 1).map { it.uid })
+        assertEquals(listOf(active.uid), s.list(conversation = sms, limit = 1).map { it.uid })
+    }
 }

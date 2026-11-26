@@ -46,9 +46,13 @@ class Scheduler(private val archive: Archive, private val graceMs: Long = DEFAUL
 
     fun get(uid: String): ScheduledMessage? = db.one("SELECT * FROM scheduled WHERE uid=?", uid)?.let(::toMsg)
 
-    fun list(conversation: Long? = null, limit: Int = 100): List<ScheduledMessage> =
-        (if (conversation == null) db.rows("SELECT * FROM scheduled ORDER BY send_at, id LIMIT ?", limit)
-        else db.rows("SELECT * FROM scheduled WHERE conversation=? ORDER BY send_at, id LIMIT ?", conversation, limit)).map(::toMsg)
+    fun list(conversation: Long? = null, limit: Int = 100): List<ScheduledMessage> {
+        val order = """ORDER BY CASE WHEN state IN ('PENDING','SENDING') THEN 0 ELSE 1 END,
+            CASE WHEN state IN ('PENDING','SENDING') THEN send_at END, updated DESC, id DESC LIMIT ?"""
+        val rows = if (conversation == null) db.rows("SELECT * FROM scheduled $order", limit)
+        else db.rows("SELECT * FROM scheduled WHERE conversation=? $order", conversation, limit)
+        return rows.map(::toMsg)
+    }
 
     /** When the next alarm should fire, or null if nothing is pending. Includes overdue items (they resolve on the next claim). */
     fun nextDue(): Long? = db.one("SELECT MIN(send_at) t FROM scheduled WHERE state='PENDING'")?.get("t")?.toLongOrNull()

@@ -106,6 +106,15 @@ class ScheduledSmsTest {
         assertEquals(SchedState.UNKNOWN, scheduler.get(m.uid)!!.state)
     }
 
+    @Test fun startupRecoversAnInterruptedSendWithoutWaitingForAnotherAlarm() {
+        val m = scheduler.schedule(conversation(), "maybe", now + min)
+        now += 2 * min
+        scheduler.claimDue()
+        ScheduledSms.arm(ctx, scheduler)
+        assertEquals(SchedState.UNKNOWN, scheduler.get(m.uid)!!.state)
+        assertTrue(sent.isEmpty())
+    }
+
     @Test fun aMessageTheAlarmCameTooLateForIsMissedNotSent() {
         val m = scheduler.schedule(conversation(), "too late", now + 5 * min)
         now += 3 * 60 * min

@@ -382,6 +382,13 @@ recognised and not duplicated; two identical texts ("ok", "ok") are kept as two;
 times in the new file look uniformly shifted (a time-zone or daylight-saving difference), you are offered a shift to tick; it is never applied for you.
 If the same message appears with different text, it is listed as a **conflict** and nothing is overwritten: choose *Keep saved*, *Use new* or *Keep both*.
 
+### Schedule a text
+
+Open a saved, one-to-one SMS conversation and tap **Schedule a text**. Write the message, choose the date and time, and confirm the recipient and contents.
+VictorSMS uses the phone's default SMS SIM. Open **Settings → Scheduled texts** to check the queue and cancel pending texts. Android can delay the alarm.
+Texts more than 15 minutes overdue are marked **Missed**. A text interrupted during submission shows **Unknown outcome** and stays out of the send queue.
+**Submitted to Android** confirms that Android accepted the request. Carrier delivery still needs a phone test.
+
 **Undo and delete:** each import has *Undo this import* (removes only the messages that import alone added). *Delete…* removes the messages and the
 search index, and lets you choose whether approved facts, summaries and the original files go too. Both ask first.
 
