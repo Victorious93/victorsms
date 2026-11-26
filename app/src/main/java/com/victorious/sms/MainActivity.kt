@@ -10,6 +10,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.victorious.sms.archive.PendingShare
+import com.victorious.sms.bridge.PendingDraftsScreen
 import com.victorious.sms.ui.screens.ConnectedAppsScreen
 import com.victorious.sms.ui.screens.ImportWizardScreen
 import com.victorious.sms.ui.screens.SavedConversationScreen
@@ -72,6 +73,7 @@ class MainActivity : ComponentActivity() {
                                 "Email accounts" to { nav.navigate("mail_accounts") },
                                 "Email outbox" to { nav.navigate("mail_outbox") },
                                 "Scheduled texts" to { nav.navigate("scheduled") },
+                                "Drafts to review" to { nav.navigate("pending_drafts") },
                                 "Saved conversations (import)" to { nav.navigate("saved") },
                                 "Blocking & spam" to { nav.navigate("blocking") },
                                 "Spam folder" to { nav.navigate("spam") },
@@ -85,6 +87,7 @@ class MainActivity : ComponentActivity() {
                             ),
                         ) { nav.popBackStack() }
                     }
+                    composable("pending_drafts") { PendingDraftsScreen { nav.popBackStack() } }
                     composable("saved") {
                         SavedConversationsScreen(
                             onOpen = { nav.navigate("saved/$it") },

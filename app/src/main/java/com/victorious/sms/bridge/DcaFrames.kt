@@ -66,6 +66,7 @@ object DcaFrames {
         "invalid_frame" -> "The request could not be read."
         "invalid_parameters" -> "A parameter was missing, unknown or out of range."
         "not_found" -> "No such conversation is shared with the assistant."
+        "no_sms_recipient" -> "The saved conversation does not have a single native SMS recipient."
         "not_implemented" -> "VictorSMS does not implement that operation."
         else -> "VictorSMS could not complete the request ($code)."
     }

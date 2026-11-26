@@ -35,6 +35,30 @@ class DraftHandoffTest {
 
     @Test fun statusIsOnlyForTheOriginalCaller() { val h = fresh(); h.deliver(dca, p("k"), 1000) { }; assertNull(h.status(CallerIdentity("evil.app", "BB"), "k", 1000)) }
 
+    @Test fun aDifferentSigningCertificateCannotReadOrReuseTheSameDraft() {
+        val h = fresh()
+        h.deliver(dca, p("k"), 1000) { }
+        val differentCert = CallerIdentity(dca.packageName, "BB")
+        assertNull(h.status(differentCert, "k", 1000))
+        assertEquals(DraftHandoff.Result.Rejected("not_found"), h.deliver(differentCert, p("k"), 1000) { })
+    }
+
+    @Test fun anInterruptedSubmissionRecoversAsUnknownAndCannotSendAgain() {
+        val store = MemoryPendingStore()
+        DraftHandoff.attachStore(store)
+        DraftHandoff.deliver(dca, p("crash"), 1000) { }
+        val interruption = runCatching {
+            DraftHandoff.approve("crash", 1100) { throw AssertionError("process interrupted") }
+        }
+        assertTrue(interruption.isFailure)
+        DraftHandoff.attachStore(store, 1200)
+        assertEquals(DraftState.UNKNOWN, DraftHandoff.status(dca, "crash", 1200))
+        assertEquals(DraftState.UNKNOWN, DraftHandoff.approve("crash", 1300) {
+            fail("An uncertain submission must not be sent again")
+            DraftState.SUBMITTED to null
+        })
+    }
+
     @Test fun surviveProcessDeathViaStore() { val st = MemoryPendingStore(); DraftHandoff.attachStore(st); DraftHandoff.deliver(dca, p("m"), 1000) { }
         DraftHandoff.attachStore(st, 1500); assertEquals(DraftState.RECEIVED, DraftHandoff.status(dca, "m", 1500)) }
 }

@@ -9,6 +9,12 @@
 - The file is **not encrypted**; the dialog says so. 8 `comms-core` tests (round trip of CSV and JSON with commas, quotes, newlines, emoji and a leading `=`; paging across 1,203 messages sharing one timestamp) and 4 app tests. Mutation-checked in
   `comms-core`. The app screen and the file picker have never run on a device.
 
+### Added (assistant draft review)
+- Accept drafts by shared conversation ID from paired DroidCommand-AI with both **Archive read** and **Drafts** grants.
+  VictorSMS resolves the address of an eligible native SMS conversation locally and presents the editable draft for approval.
+- **Settings → Drafts to review** opens waiting drafts independently of notifications.
+- A draft interrupted during submission opens with an unknown outcome after restart and cannot submit again.
+
 ### Added (scheduled texts screen)
 - Schedule a text from a saved one-to-one SMS conversation and review the recipient, body and time before queuing it.
 - Review scheduled, missed and uncertain texts in Settings and cancel pending texts. Active texts stay visible above recent history.

@@ -19,7 +19,7 @@ enum class OpGroup { READ, SEND, DRAFT, ARCHIVE_READ }
 fun opGroupOf(op: String): OpGroup? = when (op) {
     in BridgeReads.CAPABILITIES, in BridgeReads.STATUS, "sms.list_threads", "sms.read_thread" -> OpGroup.READ
     "sms.send", "sms.send.status" -> OpGroup.SEND
-    DraftCapability.OP_DELIVER, DraftCapability.OP_STATUS -> OpGroup.DRAFT
+    DraftCapability.OP_DELIVER, DraftCapability.OP_FROM_ARCHIVE, DraftCapability.OP_STATUS -> OpGroup.DRAFT
     else -> if (ArchiveWire.isArchiveOp(op)) OpGroup.ARCHIVE_READ else null
 }
 
@@ -134,6 +134,9 @@ object PairingPolicy {
         }
         val group = opGroupOf(op) ?: return Outcome(AuthDecision.Denied("unsupported_operation"))
         if (group !in app.groups) return Outcome(AuthDecision.Denied("permission_denied"))
+        if (op == DraftCapability.OP_FROM_ARCHIVE && OpGroup.ARCHIVE_READ !in app.groups) {
+            return Outcome(AuthDecision.Denied("permission_denied"))
+        }
         // sms.send always needs on-device approval; there is no autosend path.
         return Outcome(AuthDecision.Allowed(CallerIdentity(app.packageName, app.certSha256), needsUserConfirm = op == "sms.send"))
     }

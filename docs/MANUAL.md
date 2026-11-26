@@ -423,3 +423,10 @@ change or delete anything through this, and it can only ever see conversations y
 Upgrading VictorSMS, or restoring an older backup, leaves every conversation switched **off**. Deleting a conversation also removes its request log.
 Anything the assistant reads goes wherever your droidcommand-AI inference policy sends it (this device, your PC, or a cloud model you confirmed); check that
 policy in droidcommand-AI before switching a private conversation on.
+
+### Review an assistant draft
+
+Pair DroidCommand-AI under **Connected apps** and grant both **Archive read** and **Drafts**. Enable assistant access on the
+saved SMS conversation. An updated DroidCommand-AI can hand off a draft from that conversation. Open the notification or
+choose **Settings → Drafts to review**. Check the phone number and text, edit the message if needed, then select **Send** or
+**Decline**. The draft uses the phone's default SMS SIM. A change to the stored recipient or removal of a grant blocks submission.
