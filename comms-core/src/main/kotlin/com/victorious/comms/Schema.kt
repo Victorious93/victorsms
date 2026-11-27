@@ -14,7 +14,7 @@ package com.victorious.comms
  *    unapproved bot text.
  */
 object Schema {
-    const val VERSION = 3
+    const val VERSION = 4
 
     fun migrate(db: SqlDb) {
         val current = db.one("PRAGMA user_version")?.get("user_version")?.toIntOrNull() ?: 0
@@ -24,6 +24,11 @@ object Schema {
         if (current < 1) db.tx { v1().forEach(db::exec); db.exec("PRAGMA user_version = 1") }
         if (current < 2) db.tx { v2().forEach(db::exec); db.exec("PRAGMA user_version = 2") }
         if (current < 3) db.tx { v3().forEach(db::exec); db.exec("PRAGMA user_version = 3") }
+        if (current < 4) db.tx {
+            db.exec("ALTER TABLE scheduled ADD COLUMN sms_address TEXT")
+            db.exec("ALTER TABLE scheduled ADD COLUMN sms_subscription_id INTEGER")
+            db.exec("PRAGMA user_version = 4")
+        }
     }
 
     /**

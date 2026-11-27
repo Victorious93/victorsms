@@ -57,6 +57,10 @@ import com.victorious.sms.archive.ArchiveRuntime
 import com.victorious.sms.mail.MailRepository
 import com.victorious.sms.mail.StoredAccount
 import com.victorious.sms.sms.SmsRepository
+import com.victorious.sms.sms.SmsSubmission
+import com.victorious.sms.sms.SmsSubmissionState
+import com.victorious.sms.sms.SmsSubscriptions
+import com.victorious.sms.ui.screens.SmsSimPicker
 import com.victorious.sms.ui.theme.Cyan
 import com.victorious.sms.ui.theme.Magenta
 import com.victorious.sms.ui.theme.VictorSMSTheme
@@ -101,7 +105,7 @@ object DraftReview {
     }
 
     /** What "Send" does, for the identity the owner picked. Returns the final state to report. */
-    fun submit(ctx: Context, d: IncomingDraft, accountId: String?, body: String): Pair<DraftState, String?> {
+    fun submit(ctx: Context, d: IncomingDraft, accountId: String?, body: String, sim: Int?): Pair<DraftState, String?> {
         val op = if (d.conversation == null) DraftCapability.OP_DELIVER else DraftCapability.OP_FROM_ARCHIVE
         val authorization = PairingPolicy.decide(
             BridgeSettings(ctx).externalControlEnabled, listOf(d.caller), PairingRegistry(ctx).all(), op,
@@ -116,12 +120,17 @@ object DraftReview {
         }
         if (d.channel == "sms") {
             if (body.isBlank()) return DraftState.FAILED to "Enter a text message first."
-            val repo = SmsRepository(ctx); var ok = 0
-            for (to in d.to) if (repo.send(to, body, com.victorious.comms.Author.BOT_APPROVED)) ok++
-            return when (ok) {
-                d.to.size -> DraftState.SUBMITTED to "Submitted to Android. Carrier delivery is unconfirmed."
-                0 -> DraftState.UNKNOWN to "Check the SMS conversation before sending again."
-                else -> DraftState.UNKNOWN to "Android accepted $ok of ${d.to.size} submissions. Check the conversations before sending again."
+            val repo = SmsRepository(ctx)
+            val results = d.to.mapIndexed { index, to ->
+                repo.send(to, body, com.victorious.comms.Author.BOT_APPROVED, sim,
+                    requestKey = "draft:${d.caller.packageName}:${d.draftId}:$index")
+            }
+            val tracked = results.filterIsInstance<SmsSubmission.Tracked>()
+            if (tracked.isEmpty()) return DraftState.FAILED to (results.firstOrNull() as? SmsSubmission.Refused)?.reason
+            val uncertain = tracked.any { it.receipt.state() == SmsSubmissionState.UNKNOWN }
+            return when {
+                uncertain || tracked.size != d.to.size -> DraftState.UNKNOWN to "Check SMS activity before sending again."
+                else -> DraftState.SUBMITTED to "Open SMS activity for carrier status."
             }
         }
         val repo = MailRepository.get(ctx)
@@ -244,11 +253,16 @@ class ReviewDraftActivity : ComponentActivity() {
                     var pick by rememberSaveable(d.draftId) {
                         mutableStateOf(accounts.firstOrNull { a -> d.accountHint?.equals(a.address, true) == true }?.id ?: accounts.firstOrNull()?.id)
                     }
+                    var sim by rememberSaveable(d.draftId) {
+                        mutableStateOf(d.to.singleOrNull()?.let { SmsSubscriptions(applicationContext).preferred(it) })
+                    }
                     if (d.channel == "email") {
                         Text("Send as:", color = Cyan)
                         if (accounts.isEmpty()) Text("No mail account is set up in VictorSMS. Add one in Settings → Email accounts first.", color = Magenta)
                         accounts.forEach { a -> Row(verticalAlignment = Alignment.CenterVertically) { RadioButton(selected = pick == a.id, onClick = { pick = a.id }); Text("${a.displayName} <${a.address}>", color = MaterialTheme.colorScheme.onBackground) } }
-                    } else Text("Send as: this phone's SMS (default SIM)", color = MaterialTheme.colorScheme.onBackground)
+                    } else {
+                        SmsSimPicker(sim, onSelected = { sim = it }, enabled = !busy)
+                    }
                     Text("To: ${d.to.joinToString()}", color = MaterialTheme.colorScheme.onBackground)
                     if (d.cc.isNotEmpty()) Text("Cc: ${d.cc.joinToString()}", color = MaterialTheme.colorScheme.onBackground)
                     if (d.bcc.isNotEmpty()) Text("Bcc: ${d.bcc.joinToString()}", color = MaterialTheme.colorScheme.onBackground)
@@ -263,12 +277,13 @@ class ReviewDraftActivity : ComponentActivity() {
                         Button(enabled = !busy && if (d.channel == "sms") body.isNotBlank() else pick != null, onClick = {
                             val acct = pick
                             val text = body
+                            val selectedSim = sim
                             busy = true
                             scope.launch {
                                 try {
                                     outcome = withContext(Dispatchers.IO) {
                                         DraftHandoff.approve(d.draftId, System.currentTimeMillis(), d.caller.packageName) { x ->
-                                            DraftReview.submit(applicationContext, x, acct, text)
+                                            DraftReview.submit(applicationContext, x, acct, text, selectedSim)
                                         }
                                     }
                                     status = d.detail

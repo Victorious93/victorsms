@@ -112,9 +112,9 @@ class RelayNode(private val context: Context) {
             }
             "relay.sms.send.status" -> {
                 RemoteSmsQueue.ensureLoaded(context)
-                val st = RemoteSmsQueue.status(CallerIdentity("phone:" + peer.name, peer.fingerprint), p.optString("requestId"))
+                val st = RemoteSmsQueue.carrierStatus(context, CallerIdentity("phone:" + peer.name, peer.fingerprint), p.optString("requestId"))
                     ?: return err(id, "not_found")
-                ok(id, JSONObject().put("status", st.name.lowercase()))
+                ok(id, st)
             }
             "relay.call.place" -> {
                 if (!peer.allowCalls) return err(id, "permission_denied")

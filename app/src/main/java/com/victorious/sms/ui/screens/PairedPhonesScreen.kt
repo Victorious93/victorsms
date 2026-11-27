@@ -142,8 +142,11 @@ private fun RelayActions(node: RelayNode, p: PairedPhone) {
         repeat(40) {
             delay(3000)
             val r = runCatching { node.request(p, statusOp, node.envelope().put("requestId", requestId)) }.getOrNull()
-            val st = r?.optJSONObject("result")?.optString("status") ?: r?.optString("error") ?: "unreachable"
-            status = "Status: $st"
+            val result = r?.optJSONObject("result")
+            val st = result?.optString("status") ?: r?.optString("error") ?: "unreachable"
+            val submission = result?.optString("submission")?.takeIf { it.isNotBlank() } ?: st
+            val delivery = result?.optString("delivery")?.takeIf { it == "delivered" || it == "failed" }
+            status = "Status: $submission" + (delivery?.let { " · Delivery $it" } ?: "")
             if (st != "pending") return@launch
         }
     }

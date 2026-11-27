@@ -141,6 +141,7 @@ fun LoginScreen(onLoggedIn: () -> Unit, onHelp: () -> Unit, onCancel: (() -> Uni
 fun RoomListScreen(
     onOpen: (accountId: String, roomId: String) -> Unit,
     onOpenSms: (threadId: Long, address: String) -> Unit,
+    onNewSms: () -> Unit,
     onOpenBot: (kind: String) -> Unit = {},
     onOpenMail: (accountId: String, threadKey: String) -> Unit = { _, _ -> },
     onCompose: () -> Unit = {},
@@ -218,6 +219,7 @@ fun RoomListScreen(
     val scope = rememberCoroutineScope()
     var menu by remember { mutableStateOf(false) }
     Page("Inbox", actions = {
+        TextButton(onClick = onNewSms) { Text("New text", color = Cyan) }
         Box {
             TextButton(onClick = { menu = true }) { Text(current ?: "Accounts", color = Cyan, maxLines = 1) }
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {

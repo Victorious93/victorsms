@@ -2,7 +2,11 @@
 
 ## Unreleased
 
-Nothing yet.
+### Carrier SMS
+
+- Open **New text** from the inbox and choose a SIM for each conversation. Remote approvals, assistant drafts and scheduled texts offer their own SIM selection.
+- Track Android send callbacks and carrier delivery reports for every SMS segment. The conversation and **Settings → SMS activity** show sending, sent, partial, failed and unknown outcomes.
+- Preserve the selected recipient and SIM for a scheduled text. If the recipient changes or the selected SIM becomes inactive, the text is held back.
 
 ## 0.3.0 — debug-signed pre-release, 26 November 2026 (commit `b5c0c4a`)
 

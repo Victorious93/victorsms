@@ -23,6 +23,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,24 +33,33 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.victorious.sms.sms.SmsMessage
 import com.victorious.sms.sms.SmsRepository
+import com.victorious.sms.sms.SmsSubmission
+import com.victorious.sms.sms.SmsSubmissionState
+import com.victorious.sms.sms.SmsSubscriptions
 import com.victorious.sms.ui.theme.Charcoal
 import com.victorious.sms.ui.theme.CharcoalSurface
 import com.victorious.sms.ui.theme.Cyan
 import com.victorious.sms.ui.theme.Magenta
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.UUID
 
 /** One SMS thread (threadId >= 0) or a new message to [address] (threadId < 0). */
 @Composable
 fun SmsThreadScreen(threadId: Long, address: String, initialBody: String = "", onBack: () -> Unit) {
     val ctx = LocalContext.current
     val repo = remember { SmsRepository(ctx) }
+    val subscriptions = remember { SmsSubscriptions(ctx) }
     val scope = rememberCoroutineScope()
-    var to by remember { mutableStateOf(address) }
+    var to by rememberSaveable { mutableStateOf(address) }
     var msgs by remember { mutableStateOf(emptyList<SmsMessage>()) }
-    var draft by remember { mutableStateOf(initialBody) }
+    var draft by rememberSaveable { mutableStateOf(initialBody) }
+    var requestKey by rememberSaveable { mutableStateOf(UUID.randomUUID().toString()) }
+    var sending by remember { mutableStateOf(false) }
+    var selectedSim by remember(to) { mutableStateOf(subscriptions.preferred(to)) }
     var status by remember { mutableStateOf<String?>(null) }
     val twilio = remember { com.victorious.sms.twilio.TwilioCredentials(ctx) }
     var identity by remember(to) { mutableStateOf(twilio.resolve(to)) }
@@ -58,8 +68,13 @@ fun SmsThreadScreen(threadId: Long, address: String, initialBody: String = "", o
     var mediaUrl by remember { mutableStateOf("") }
     // Paid action pending confirmation: (title, price text, action)
     var confirm by remember { mutableStateOf<Triple<String, String?, suspend () -> String>?>(null) }
-    LaunchedEffect(threadId) {
-        while (threadId >= 0) { msgs = withContext(Dispatchers.IO) { repo.messages(threadId) }; delay(3000) }
+    fun editDraft(text: String) {
+        draft = text
+        requestKey = UUID.randomUUID().toString()
+    }
+    LaunchedEffect(threadId, to) {
+        msgs = emptyList()
+        repo.observeMessages(threadId, to).collect { msgs = it }
     }
     // Alias messages with this person (both directions), fetched from Twilio. Never logged.
     LaunchedEffect(to, twilio.aliases) {
@@ -76,6 +91,7 @@ fun SmsThreadScreen(threadId: Long, address: String, initialBody: String = "", o
         }
     }
     val shown = (msgs + aliasMsgs).distinctBy { it.id }.sortedBy { it.dateMs }
+    val now = receiptClock(msgs.mapNotNull { it.receipt })
     Column(Modifier.fillMaxSize().background(Charcoal).safeDrawingPadding().imePadding()) {
         Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(if (threadId >= 0) to else "New SMS", color = Cyan, fontSize = 22.sp, fontWeight = FontWeight.Bold,
@@ -89,7 +105,8 @@ fun SmsThreadScreen(threadId: Long, address: String, initialBody: String = "", o
             TextButton(onClick = onBack) { Text("Back", color = Cyan) }
         }
         if (threadId < 0) {
-            OutlinedTextField(to, { to = it }, label = { Text("To") }, singleLine = true,
+            OutlinedTextField(to, { to = it; requestKey = UUID.randomUUID().toString() },
+                label = { Text("To") }, enabled = !sending, singleLine = true,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp))
         }
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), reverseLayout = true) {
@@ -98,18 +115,27 @@ fun SmsThreadScreen(threadId: Long, address: String, initialBody: String = "", o
                     horizontalAlignment = if (m.outgoing) Alignment.End else Alignment.Start) {
                     Text(m.body, color = MaterialTheme.colorScheme.onBackground,
                         modifier = Modifier.background(CharcoalSurface, RoundedCornerShape(12.dp)).padding(10.dp))
+                    m.receipt?.let { receipt ->
+                        Text("${receipt.statusLabel(now)} · ${receipt.sim.label}", color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 3.dp), fontSize = 12.sp)
+                        if (!sending && draft.isBlank() && receipt.state(now) in setOf(
+                                SmsSubmissionState.FAILED, SmsSubmissionState.PARTIAL, SmsSubmissionState.UNKNOWN,
+                            )) {
+                            TextButton(onClick = { editDraft(m.body) }) { Text("Copy to draft") }
+                        }
+                    }
                 }
             }
         }
         status?.let { Text(it, color = Magenta, modifier = Modifier.padding(horizontal = 12.dp)) }
-        AssistBar(to, { msgs.map { it.outgoing to it.body } }, draft) { draft = it }
+        AssistBar(to, { msgs.map { it.outgoing to it.body } }, draft) { if (!sending) editDraft(it) }
         // Identity in use, always visible. Tap to change for this thread.
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("Sending as: " + com.victorious.sms.twilio.IdentityResolver.label(identity),
                 color = if (identity is com.victorious.sms.twilio.Identity.Alias) Magenta else Cyan, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.weight(1f))
             if (twilio.isSet() && twilio.aliases.isNotEmpty()) {
-                TextButton(onClick = { pickIdentity = true }) { Text("Change", color = Cyan, fontSize = 12.sp) }
+                TextButton(enabled = !sending, onClick = { pickIdentity = true }) { Text("Change", color = Cyan, fontSize = 12.sp) }
                 val id = identity
                 if (id is com.victorious.sms.twilio.Identity.Alias && to.isNotBlank()) {
                     TextButton(onClick = {
@@ -126,27 +152,53 @@ fun SmsThreadScreen(threadId: Long, address: String, initialBody: String = "", o
                 }
             }
         }
+        if (identity == com.victorious.sms.twilio.Identity.Sim && to.isNotBlank()) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+                SmsSimPicker(selectedSim, onSelected = {
+                    subscriptions.setPreferred(to, it)
+                    selectedSim = it
+                }, enabled = !sending)
+            }
+        }
         if (identity is com.victorious.sms.twilio.Identity.Alias) {
             OutlinedTextField(mediaUrl, { mediaUrl = it.trim() }, label = { Text("MMS image URL (public https, optional)") }, singleLine = true,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp))
         }
         Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(draft, { draft = it }, placeholder = { Text("Text message") }, modifier = Modifier.weight(1f))
+            OutlinedTextField(draft, ::editDraft, placeholder = { Text("Text message") },
+                modifier = Modifier.weight(1f), enabled = !sending)
             Spacer(Modifier.padding(4.dp))
-            Button(enabled = (draft.isNotBlank() || mediaUrl.isNotBlank()) && to.isNotBlank(), onClick = {
+            Button(enabled = !sending && (draft.isNotBlank() || mediaUrl.isNotBlank()) && to.isNotBlank(), onClick = {
+                if (sending) return@Button
                 val text = draft; val dest = to; val id = identity; val media = mediaUrl.ifBlank { null }
+                val sim = selectedSim
+                val key = requestKey
+                sending = true
                 scope.launch {
-                    if (id is com.victorious.sms.twilio.Identity.Alias) {
-                        // Paid: confirm with price first.
-                        val price = withContext(Dispatchers.IO) { runCatching { com.victorious.sms.twilio.TwilioClient(twilio).smsPrice("US") }.getOrNull() }
-                        confirm = Triple(if (media != null) "Send MMS from alias …${id.number.takeLast(4)}?" else "Send SMS from alias …${id.number.takeLast(4)}?",
-                            price?.let { if (media != null) "SMS rate about $it; MMS is billed at Twilio's (higher) MMS rate" else "about $it" }) {
-                            com.victorious.sms.twilio.TwilioClient(twilio).sendMessage(id.number, com.victorious.sms.twilio.PhoneNumbers.normalize(dest), text, media)
-                            draft = ""; mediaUrl = ""; "Sent via Twilio from your alias."
+                    try {
+                        if (id is com.victorious.sms.twilio.Identity.Alias) {
+                            val price = withContext(Dispatchers.IO) { runCatching { com.victorious.sms.twilio.TwilioClient(twilio).smsPrice("US") }.getOrNull() }
+                            confirm = Triple(if (media != null) "Send MMS from alias …${id.number.takeLast(4)}?" else "Send SMS from alias …${id.number.takeLast(4)}?",
+                                price?.let { if (media != null) "SMS rate about $it; MMS is billed at Twilio's (higher) MMS rate" else "about $it" }) {
+                                com.victorious.sms.twilio.TwilioClient(twilio).sendMessage(id.number, com.victorious.sms.twilio.PhoneNumbers.normalize(dest), text, media)
+                                editDraft("")
+                                mediaUrl = ""
+                                "Sent via Twilio from your alias."
+                            }
+                        } else {
+                            when (val result = withContext(Dispatchers.IO) {
+                                repo.send(dest, text, com.victorious.comms.Author.OWNER, sim, key)
+                            }) {
+                                is SmsSubmission.Tracked -> { editDraft(""); status = null }
+                                is SmsSubmission.Refused -> status = result.reason
+                            }
                         }
-                    } else {
-                        val ok = withContext(Dispatchers.IO) { repo.send(dest, text, com.victorious.comms.Author.OWNER) }
-                        if (ok) { draft = ""; status = null } else status = "Not sent: SMS permission missing or send failed."
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        status = "Check SMS activity before sending again."
+                    } finally {
+                        sending = false
                     }
                 }
             }) { Text("Send") }

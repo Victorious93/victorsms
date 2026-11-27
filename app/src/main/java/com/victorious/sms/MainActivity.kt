@@ -12,6 +12,7 @@ import androidx.navigation.compose.rememberNavController
 import com.victorious.sms.archive.PendingShare
 import com.victorious.sms.bridge.PendingDraftsScreen
 import com.victorious.sms.ui.screens.ConnectedAppsScreen
+import com.victorious.sms.ui.screens.CarrierSmsActivityScreen
 import com.victorious.sms.ui.screens.ImportWizardScreen
 import com.victorious.sms.ui.screens.SavedConversationScreen
 import com.victorious.sms.ui.screens.SavedConversationsScreen
@@ -73,6 +74,7 @@ class MainActivity : ComponentActivity() {
                                 "Email accounts" to { nav.navigate("mail_accounts") },
                                 "Email outbox" to { nav.navigate("mail_outbox") },
                                 "Scheduled texts" to { nav.navigate("scheduled") },
+                                "SMS activity" to { nav.navigate("sms_activity") },
                                 "Drafts to review" to { nav.navigate("pending_drafts") },
                                 "Saved conversations (import)" to { nav.navigate("saved") },
                                 "Blocking & spam" to { nav.navigate("blocking") },
@@ -88,6 +90,7 @@ class MainActivity : ComponentActivity() {
                         ) { nav.popBackStack() }
                     }
                     composable("pending_drafts") { PendingDraftsScreen { nav.popBackStack() } }
+                    composable("sms_activity") { CarrierSmsActivityScreen { nav.popBackStack() } }
                     composable("saved") {
                         SavedConversationsScreen(
                             onOpen = { nav.navigate("saved/$it") },
@@ -137,6 +140,7 @@ class MainActivity : ComponentActivity() {
                         RoomListScreen(
                             onOpen = { acc, id -> nav.navigate("room/" + Uri.encode(acc) + "/" + Uri.encode(id)) },
                             onOpenSms = { tid, addr -> nav.navigate("sms/$tid/" + Uri.encode(addr)) },
+                            onNewSms = { nav.navigate("sms_compose") },
                             onOpenBot = { kind -> nav.navigate("bot/$kind") },
                             onOpenMail = { acc, key -> nav.navigate("mail_thread/" + Uri.encode(acc) + "/" + Uri.encode(key)) },
                             onCompose = { nav.navigate("mail_compose/-/new/-") },
@@ -160,6 +164,9 @@ class MainActivity : ComponentActivity() {
                     }
                     composable("sms_new") {
                         SmsThreadScreen(-1L, composeTo, composeBody) { nav.popBackStack() }
+                    }
+                    composable("sms_compose") {
+                        SmsThreadScreen(-1L, "") { nav.popBackStack() }
                     }
                     composable("sip") { com.victorious.sms.ui.screens.SipSettingsScreen { nav.popBackStack() } }
                     composable("mail_accounts") { com.victorious.sms.ui.screens.MailAccountsScreen { nav.popBackStack() } }
